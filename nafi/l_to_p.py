@@ -30,8 +30,8 @@ def bayesian_p(lnl, interval_type='hdpi', prior=None, hypothesis_spacing=None):
     ln_prior = np.log(prior)
     # Get the posterior on our grid of mu
     # ln_evidence = logsumexp(lnl_sig, axis=-1)
-    ln_posterior = lnl + ln_prior[None,None,:] #  - ln_evidence[...,None]
-    posterior = np.exp(ln_posterior - logsumexp(ln_posterior, axis=-1)[:,:,None])
+    ln_posterior = lnl + ln_prior[None,:] #  - ln_evidence[...,None]
+    posterior = np.exp(ln_posterior - logsumexp(ln_posterior, axis=-1)[...,None])
     np.testing.assert_allclose(np.sum(posterior, axis=-1), 1)
 
     if interval_type == 'hdpi':
@@ -42,7 +42,7 @@ def bayesian_p(lnl, interval_type='hdpi', prior=None, hypothesis_spacing=None):
             #  a flat prior and it all cancels out... maybe??)
             order = np.argsort(posterior, axis=-1)
         else:
-            order = np.argsort(posterior / hypothesis_spacing[None,None,:], axis=-1)
+            order = np.argsort(posterior / hypothesis_spacing[None,:], axis=-1)
         reorder = np.argsort(order, axis=-1)
         # Sum posterior from low to high posterior density bins
         ps = np.take_along_axis(
@@ -54,7 +54,7 @@ def bayesian_p(lnl, interval_type='hdpi', prior=None, hypothesis_spacing=None):
         
     elif interval_type == 'ul':
         # Upper limits: sum from high to low values
-        ps = np.cumsum(posterior[:,:,::-1], axis=-1)[:,:,::-1]
+        ps = np.cumsum(posterior[...,::-1], axis=-1)[...,::-1]
 
     else:
         raise ValueError(f"Unknown interval type {interval_type}")
@@ -100,9 +100,29 @@ def bestfit(lnl, interpolate=True):
 
 
 @export
+def neyman_pvals(ts, toy_weight, on_bgonly=False, progress=False):
+    """Convert ts to p-values using a Neyman construction"""
+    n_hyp = ts.shape[-1]
+    ps = np.zeros(ts.shape)
+    for hyp_i in nafi.utils.tqdm_maybe(progress)(
+            range(n_hyp), desc='Computing p-values', leave=False):
+        if on_bgonly:
+            # Assuming hypothesis 0 is background only!
+            truth_i = 0
+        else:
+            truth_i = hyp_i
+        ps[...,hyp_i] = 1 - (
+            nafi.utils.weighted_ps(
+                ts[:,hyp_i], 
+                toy_weight[:,truth_i]
+            ).reshape(ts.shape[:-1]))
+    return ps
+
+
+@export
 def frequentist_p(
         lnl, 
-        p_n_mu, 
+        toy_weight, 
         statistic='t', 
         cls=False,
         interpolate_bestfit=True, 
@@ -113,9 +133,9 @@ def frequentist_p(
     Parameters
     ----------
     lnl : array
-        Likelihood ratio, shape (|n_sig|, |trials|, |n_hyp|)
-    p_n_mu : array
-        P(n_sig | hypothesis)
+        Likelihood ratio, shape (|trials|, |n_hyp|)
+    toy_weight : array
+        (Hypothesis-dependent) weight of each toy, shape (|trials|, |n_hyp|)
     interpolate_bestfit : bool
         If True, use interpolation to estimate the best-fit hypothesis more
         precisely.
@@ -125,23 +145,19 @@ def frequentist_p(
     cls: False
         If True, use the dreaded CLs method.
     """
-    trials_per_n, _, n_hyp = lnl.shape
-
-    # Weight of toys, assuming hypothesis = truth
-    toy_weight = nafi.utils.toy_weights(
-        shape=lnl.shape, p_n_mu=p_n_mu).repeat(trials_per_n, axis=0)
+    _, n_hyp = lnl.shape
 
     lnl_best, best_i = bestfit(lnl, interpolate=interpolate_bestfit)
 
-    # Compute statistics (|n_sig|,|trials|,|hyps|)
+    # Compute statistics (|n_trials|,|n_hyps|)
     if statistic in ('t', 'q'):
         ts = -2 * (lnl - lnl_best[...,None])
         if statistic == 'q':
             # Zero excesses, i.e. hypothesis <= bestfit
-            ts *= best_i[...,None] <= np.arange(n_hyp)[None,None,:]
+            ts *= best_i[...,None] <= np.arange(n_hyp)[None,:]
     elif statistic == 'q0':
         # L(best)/L(0). Note this does not depend on the hypothesis.
-        print("Assuming hypothesis[0] is background-only!")
+        # Assuming hypothesis 0 is background only!
         ts = -2 * (lnl_best[...,None] - lnl[...,0][...,None])
         # This is a sad memory hog, but the rest of the code is kind of stupid
         # so we need it to work
@@ -157,7 +173,7 @@ def frequentist_p(
     ##
 
     # P(t(mu)|mu), (|n_sig|,|trials|,|mu|)
-    ps = np.zeros(ts.shape)     # P under signal + background
+    # ps = np.zeros(ts.shape)     # P under signal + background
 
     if asymptotic:
         # Compute asymptotic p-values
@@ -176,35 +192,14 @@ def frequentist_p(
     
     else:
         # Do neyman construction
+        ps = neyman_pvals(ts, toy_weight, 
+                          progress=progress)
+            
         if cls:
-            # We're also going to compute P under background-only,
-            # for which we need sorted background-only toys.
-            ps_0 = np.zeros(ts.shape)
-            ts_0_sorted = np.sort(ts[0], axis=0)
-
-        for hyp_i in nafi.utils.tqdm_maybe(progress)(
-                range(n_hyp), desc='Computing p-values', leave=False):
-            t_flat = ts[...,hyp_i].ravel()
-            weights_flat = toy_weight[...,hyp_i].ravel()
-            # For P under signal and background, need to weight toys,
-            # as a toy's likelihood depends on the number of sig events
-            ps[...,hyp_i] = 1 - (
-                nafi.utils.weighted_ps(
-                    t_flat, 
-                    weights_flat
-                ).reshape(ts.shape[:-1]))
-            if cls:
-                # Computing p under bg-only is easier: only consider bg-only toys,
-                # which have no relative weighting.
-                ps_0[...,hyp_i] = 1 - (
-                    np.searchsorted(
-                        ts_0_sorted[:,hyp_i], 
-                        t_flat
-                    ).reshape(ts.shape[:-1])) / trials_per_n
-
-    if cls:
-        # PDG review has a 1- in the denominator... hm... 
-        # Don't see it in Read and Junk...??
-        ps = ps/ps_0
+            ps_0 = neyman_pvals(ts, toy_weight, on_bgonly=True, 
+                                progress=progress)
+            # PDG review has a 1- in the denominator... hm... 
+            # Don't see it in Read and Junk...??
+            ps = ps / ps_0
 
     return ps

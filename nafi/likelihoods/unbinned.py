@@ -72,13 +72,15 @@ def get_lnl(*, mu_sig_hyp, mu_bg, sigma_sep,
             n_sig_max,
             trials_per_n=DEFAULT_TRIALS,
             progress=False):
-    """Return (lnl, p_n_hyp), where
-        lnl is a (n_trials, n_sig, hypotheses) array of log likelihoods
-        p_n_hyp is an (n_sig, hypotheses) array with P(n_sig | hypothesis)
+    """Return (lnl, toy_weight), both (n_trials, n_hypotheses) arrays
+        lnl contains the log likelihood at each hypothesis,
+        toy_weight is an (n_trials, hypotheses) containing (hypothesis-dependent)
+        weighting factors for each toy.
 
     The model is a sum of two Gaussians, one for signal and one for background,
     separated by sigma_sep. The signal rate is a hypothesis parameter.
     """
+    n_hyp = len(mu_sig_hyp)
     n_sig_range = jnp.arange(n_sig_max)
     n_bg_max = int(np.ceil(stats.poisson(mu_bg).ppf(0.999)))
 
@@ -103,7 +105,7 @@ def get_lnl(*, mu_sig_hyp, mu_bg, sigma_sep,
         **common_kwargs))
 
     # Get lnls for different signal event counts
-    # (n_sig, n_trials, n_hyp), so we can fill it in a loop more easily
+    # (n_sig, n_trials, n_hyp)
     lnl_sig = np.zeros((n_sig_max, trials_per_n, len(mu_sig_hyp)))
     for n_sig in nafi.utils.tqdm_maybe(progress)(
             n_sig_range, desc='lnl simulations', leave=False):
@@ -118,11 +120,18 @@ def get_lnl(*, mu_sig_hyp, mu_bg, sigma_sep,
                 poisson=False,
                 key=subkey,
                 **common_kwargs))
-        
+
     # P(n_sig|mu_sig), (n_sig, n_mu)
-    p_n_mu = stats.poisson(mu=mu_sig_hyp[None,:]).pmf(n_sig_range[:,None])
+    # The range of n may be insufficient for all mu, so normalize explicitly
+    p_n_mu = stats.poisson(mu=mu_sig_hyp[None,:]).pmf(n_sig_range[:,None])    
+    p_n_mu /= p_n_mu.sum(axis=0)[None,:]
 
-    # Switch batch dimension in lnl_sig to first position
-    lnl_sig = np.moveaxis(lnl_sig, 1, 0)
+    # Weights of individual toys
+    # (n_sig, n_trials, n_mu)
+    toy_weight = (p_n_mu / trials_per_n)[:,None,:].repeat(trials_per_n, axis=1)
 
-    return lnl_sig, p_n_mu
+    # Squash the (n_sig, n_trials) dimensions into one
+    toy_weight = toy_weight.reshape(-1, n_hyp)
+    lnl_sig = lnl_sig.reshape(-1, n_hyp)
+
+    return lnl_sig, toy_weight

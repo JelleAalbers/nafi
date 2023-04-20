@@ -7,7 +7,7 @@ export, __all__ = nafi.exporter()
 
 
 @export
-def outcome_probabilities(ul, ll, hypotheses, p_n_mu=None):
+def outcome_probabilities(ul, ll, toy_weight, hypotheses):
     """Returns dict with probabilities (n_hypotheses arrays) of:
         - mistake: false exclusion of the hypotheses when it is true
         - mistake_ul: same, counting only exclusions by the upper limit
@@ -16,32 +16,30 @@ def outcome_probabilities(ul, ll, hypotheses, p_n_mu=None):
         - bg_exclusion: exclusion of hypothesis, when hypothesis 0 is true
         - bg_exclusion_ul: same, counting only exclusions by the upper limit
     """
-    toy_weight = nafi.utils.toy_weights(
-        shape=ul.shape,
-        p_n_mu=p_n_mu, hypotheses=hypotheses)
     empty_interval = np.isnan(ul) & np.isnan(ll)
 
     def get_p(bools):
-        if len(bools.shape) == 2:
+        if len(bools.shape) == 1:
             # Things like empty interval don't depend on the hypothesis,
             # except through weighting of the toys
-            bools = bools[:, :, None]
-        return np.sum(bools * toy_weight, axis=(0, 1))
+            bools = bools[:,None]
+        return np.sum(bools * toy_weight, axis=0)
 
     # Compute P(mu excluded | mu is true) -- i.e. coverage
-    ul_is_ok = hypotheses[None,None,:] <= ul[:,:,None]
-    ll_is_ok = ll[:,:,None] <= hypotheses[None,None,:]
+    ul_is_ok = hypotheses[None,:] <= ul[:,None]
+    ll_is_ok = ll[:,None] <= hypotheses[None,:]
     p_mistake = 1 - get_p(ul_is_ok & ll_is_ok)
     p_false_ul = 1 - get_p(ul_is_ok)
 
-    # Compute P(mu excluded | 0 is true) -- only need the bg-only toys
-    ll_0, ul_0 = ll[:,0], ul[:,0]
-    # These two are (n_hypotheses, n_bg_toys) arrays
-    ll0_allows_mu = ll_0[None,:] <= hypotheses[:,None]
-    ul0_allows_mu = hypotheses[:,None] <= ul_0[None,:]
-
-    p_excl_bg = 1 - np.mean(ll0_allows_mu & ul0_allows_mu, axis=1)
-    p_excl_bg_ul = 1 - np.mean(ul0_allows_mu, axis=1)
+    # Compute P(mu excluded | 0 is true)
+    # TODO: this makes (n_trials, n_hyp) arrays again
+    # is there a more memory-efficient solution?
+    ll_allows_mu = ll[:,None] <= hypotheses[None,:]
+    ul_allows_mu = hypotheses[None,:] <= ul[:,None]
+    p_excl_bg = 1 - np.average(
+        ll_allows_mu & ul_allows_mu, weights=toy_weight[:,0], axis=0)
+    p_excl_bg_ul = 1 - np.average(
+        ul_allows_mu, weights=toy_weight[:,0], axis=0)
 
     # Compute P(0 excluded | mu is true) -- only need lower limits
     excludes_zero = ll > 0
@@ -62,16 +60,17 @@ def outcome_probabilities(ul, ll, hypotheses, p_n_mu=None):
 
 
 @export
-def brazil_band(ul, ll, hypotheses=None, p_n_mu=None, progress=False):
-    toy_weight = nafi.utils.toy_weights(
-        shape=ul.shape, p_n_mu=p_n_mu, hypotheses=hypotheses)
+def brazil_band(ul, ll, toy_weight, progress=False):
+    n_hyp = toy_weight.shape[-1]
     sigmas = np.array([-2, -1, 0, 1, 2])
     n_sigmas = len(sigmas)
     quantiles = stats.norm.cdf(sigmas)
-    sensi_ll = np.zeros((len(hypotheses), n_sigmas))
-    sensi_ul = np.zeros((len(hypotheses), n_sigmas))
-    for mu_i in nafi.utils.tqdm_maybe(
-            range(len(hypotheses)), desc='Computing sensitivity quantiles', leave=False):
+    sensi_ll = np.zeros((n_hyp, n_sigmas))
+    sensi_ul = np.zeros((n_hyp, n_sigmas))
+    for mu_i in nafi.utils.tqdm_maybe(progress)(
+            range(n_hyp), desc='Computing sensitivity quantiles', leave=False):
         weights = toy_weight[...,mu_i].ravel()
-        sensi_ul[mu_i] = nafi.utils.weighted_quantile(values=ul.ravel(), quantiles=quantiles, weights=weights)
-        sensi_ll[mu_i] = nafi.utils.weighted_quantile(values=ll.ravel(), quantiles=quantiles, weights=weights)
+        sensi_ul[mu_i] = nafi.utils.weighted_quantile(
+            values=ul.ravel(), quantiles=quantiles, weights=weights)
+        sensi_ll[mu_i] = nafi.utils.weighted_quantile(
+            values=ll.ravel(), quantiles=quantiles, weights=weights)

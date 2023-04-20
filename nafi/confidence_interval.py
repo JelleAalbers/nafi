@@ -10,7 +10,7 @@ def intervals(
     """Convert p-values to confidence intervals
 
     Args:
-        ps (np.ndarray): p-values, shape (n_trials, n_sig, n_hypotheses)
+        ps (np.ndarray): p-values, shape (n_trials, n_hypotheses)
         hypotheses (np.ndarray): array of hypotheses, shape (n_hypotheses,)
         interpolate (bool): if True, use interpolation to estimate the intervals
             more precisely.
@@ -19,7 +19,7 @@ def intervals(
     Returns:
         (ul, ll), each arrays with shape of ps without the last axis.
     """
-    # is hyp allowed by the trial?  (|n_sig|,|trials|,|mu|)
+    # is hyp allowed by the trial?  (|trials|,|mu|)
     alpha = 1 - cl
     allowed = ps >= alpha
 
@@ -30,14 +30,14 @@ def intervals(
             "upper and lower limits are returned as NaN.")
 
     # Limits = lowest & highest allowed hypothesis
-    # (n_sig, n_trials)
+    # flat (n_trials,) arrays
     ul_i = np.argmax(
-        np.asarray(hypotheses)[None,None,:] * allowed,
+        np.asarray(hypotheses)[None,:] * allowed,
         axis=-1)
     ll_i = np.argmin(
         np.where(
             allowed,
-            np.asarray(hypotheses)[None,None,:],
+            np.asarray(hypotheses)[None,:],
             np.inf),
         axis=-1)
     
