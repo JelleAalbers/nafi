@@ -20,8 +20,6 @@ from tqdm import tqdm
 import nafi
 export, __all__ = nafi.exporter()
 
-DEFAULT_TRIALS = 10_000
-
 
 @partial(jax.jit, static_argnames=('n_trials', 'n_max', 'poisson'))
 def drs_one_source(*, mu, key, n_trials, n_max, 
@@ -68,9 +66,10 @@ def drs_one_source(*, mu, key, n_trials, n_max,
 
 
 @export
-def get_lnl(*, mu_sig_hyp, mu_bg, sigma_sep,
-            n_sig_max,
-            trials_per_n=DEFAULT_TRIALS,
+def get_lnl(mu_sig_hyp, mu_bg, sigma_sep,
+            n_sig_max=None,
+            seed=None,
+            trials_per_n=10_000,
             progress=False):
     """Return (lnl, toy_weight), both (n_trials, n_hypotheses) arrays
         lnl contains the log likelihood at each hypothesis,
@@ -81,11 +80,18 @@ def get_lnl(*, mu_sig_hyp, mu_bg, sigma_sep,
     separated by sigma_sep. The signal rate is a hypothesis parameter.
     """
     n_hyp = len(mu_sig_hyp)
+    if n_sig_max is None:
+        # Highest n that can reasonably occur under the largest hypothesis
+        n_sig_max = int(stats.poisson(mu_sig_hyp.max()).ppf(0.999))
+    n_sig_range = np.arange(n_sig_max)
+
     n_sig_range = jnp.arange(n_sig_max)
     n_bg_max = int(np.ceil(stats.poisson(mu_bg).ppf(0.999)))
 
     # Do simulation and ln L computation with jax. It's gonna be fast...    
-    key = jax.random.PRNGKey(seed=42)
+    if seed is None:
+        seed = np.random.randint(2**32)
+    key = jax.random.PRNGKey(seed=seed)
 
     common_kwargs = dict(
         mu_sig_hyp=mu_sig_hyp,
