@@ -107,25 +107,30 @@ np.testing.assert_array_almost_equal(
 @export
 @jax.jit
 def weighted_quantile(values, weights, quantiles, values_sorted=False):
-    """ Very close to numpy.percentile, but supports weights.
-    NOTE: quantiles should be in [0, 1]!
+    """Compute quantiles for weighted values
     :param values: numpy.array with data
-    :param quantiles: array-like with many quantiles needed
-    :param sample_weight: array-like of the same length as `array`
+    :param weights: array-like of the same length as `values`
+    :param quantiles: array-like with many quantiles needed.
+        Should all be in [0,1].    
     :param values_sorted: bool, if True, then will avoid sorting of
         initial array
-    :param old_style: if True, will correct output to be consistent
-        with numpy.percentile.
-    :return: numpy.array with computed quantiles.
+    :return: array with computed quantiles.
     """
     if not values_sorted:
         sorter = jnp.argsort(values)
         values = values[sorter]
         weights = weights[sorter]
 
-    weighted_quantiles = jnp.cumsum(weights) - 0.5 * weights
+    # Original code had - 0.5 * weights here, which fails the test below
+    weighted_quantiles = jnp.cumsum(weights)
     weighted_quantiles /= jnp.sum(weights)
     return jnp.interp(quantiles, weighted_quantiles, values)
+
+# Test quantiles are not interpolated
+assert 0. == weighted_quantile(
+    values=np.array([0, 1]), 
+    weights=np.array([0.6, 0.4]), 
+    quantiles=0.5).item()
 
 
 # Sufficiently slow that jax.jit is worth it
@@ -134,7 +139,6 @@ def weighted_quantile(values, weights, quantiles, values_sorted=False):
 def weighted_ps(x, w):
     # indices that would sort x
     order = jnp.argsort(x)
-    reorder = jnp.argsort(x)
     
     # P of getting a x lower in the sort order
     p_ordered = jnp.cumsum(w[order]) - w[order]
