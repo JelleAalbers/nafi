@@ -28,27 +28,13 @@ def get_lnl(mu_sig_hyp, mu_bg):
     """
     # Total expected events
     mu_tot = mu_sig_hyp + mu_bg
-    # best-fit total mu
-    n = np.arange(stats.poisson(mu_sig_hyp.max()).ppf(0.999)).astype(int)
-    mu_tot_best = (n - mu_bg).clip(0, None) + mu_bg
-    # Make (mu, n) arrays
-    o = None
-    # Likelihood ratio of observation (given hypothesis)
-    t = ( 
-        # Log P(test)
-        stats.poisson(mu_tot[:,o]).logpmf(n[o,:]) 
-        # Log P(best fit)
-        - stats.poisson(mu_tot_best[o,:]).logpmf(n[o,:]) )
+    # Outcomes defined by n
+    n = np.arange(stats.poisson(mu_tot.max()).ppf(0.999)).astype(int)
     # Probability of observation (given hypothesis)
-    p = stats.poisson(mu_tot[:,o]).pmf(n[o,:])
-    # Insert batch dimension of 1: no need to MC event positions since
-    # we're just counting!
-
-    # Rest of nafi expects (n, mu), not (mu, n)
-    # TODO: refactor above
-    t, p = t.T, p.T
-
+    # (n, mu) array
+    p = stats.poisson(mu_tot[None,:]).pmf(n[:,None])
+    # Log likelihood is now easy...
+    lnl = np.log(p)
     # Ensure ps are normalized over n
     p /= p.sum(axis=0)
-
-    return t, p
+    return lnl, p
