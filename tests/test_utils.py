@@ -14,9 +14,19 @@ def test_find_root_vec():
 def test_weighted_quantiles():
     # Ensure quantiles are not interpolated
     # (quantiles should be real existing values in the dataset)
-    assert 0. == nafi.weighted_quantile(
+    assert 0 == nafi.weighted_quantile(
         values=np.array([0, 1]), 
         weights=np.array([0.6, 0.4]), 
+        quantiles=0.5).item()
+    assert 1 == nafi.weighted_quantile(
+        values=np.array([0, 1]), 
+        weights=np.array([0.4, 0.6]), 
+        quantiles=0.5).item()
+    
+    # Ties are broken to the left
+    assert 0 == nafi.weighted_quantile(
+        values=np.array([0, 1]),
+        weights=np.array([1, 1]),
         quantiles=0.5).item()
 
 

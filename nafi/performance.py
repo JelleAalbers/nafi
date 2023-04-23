@@ -80,6 +80,9 @@ def brazil_band(limits, toy_weight, return_array=False,
     n_sigmas = len(sigmas)
     quantiles = stats.norm.cdf(sigmas)
     sensi = np.zeros((n_hyp, n_sigmas))
+    
+    # TODO sort once
+
     for mu_i in nafi.utils.tqdm_maybe(progress)(
             range(n_hyp), desc='Computing sensitivity quantiles', leave=False):
         weights = toy_weight[...,mu_i].ravel()

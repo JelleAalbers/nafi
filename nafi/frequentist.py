@@ -7,6 +7,10 @@ import nafi
 
 export, __all__ = nafi.exporter()
 
+DEFAULT_TEST_STATISTIC = 't'
+DEFAULT_INTERPOLATE_BESTFIT = False
+DEFAULT_CLS = False
+
 
 @export
 def maximum_likelihood(lnl, interpolate=True):
@@ -42,7 +46,10 @@ def maximum_likelihood(lnl, interpolate=True):
 
 
 @export
-def test_statistic(lnl, statistic, interpolate_bestfit=False):
+def test_statistic(
+        lnl, 
+        statistic=DEFAULT_TEST_STATISTIC, 
+        interpolate_bestfit=DEFAULT_INTERPOLATE_BESTFIT):
     """Return test statistic computed from likelihood curves
 
     Arguments:
@@ -84,14 +91,14 @@ def test_statistic(lnl, statistic, interpolate_bestfit=False):
 
 
 @export
-def asymptotic_pvals(ts, statistic, cls=False):
+def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
     """Compute asymptotic frequentist p-value for test statistics ts
     
     Arguments:
         ts: array of test statistics
         statistic: 't' or 'q'
         cls: If True, use asymptotic formulae appropriate for the CLs method 
-            instead of those for a Neyman construction.
+            instead of those for a frequentist/Neyman construction.
             (Currently just raises NotImplementedError)
     """
     # Compute asymptotic p-values
@@ -111,15 +118,14 @@ def asymptotic_pvals(ts, statistic, cls=False):
 
 
 @export
-def neyman_pvals(ts, toy_weight, on_bgonly=False, progress=False):
+def neyman_pvals(ts, toy_weight, freeze_truth_index=None, progress=False):
     """Compute p-values from test statistics ts using a Neyman construction"""
     n_hyp = ts.shape[-1]
     ps = np.zeros(ts.shape)
     for hyp_i in nafi.utils.tqdm_maybe(progress)(
             range(n_hyp), desc='Computing p-values', leave=False):
-        if on_bgonly:
-            # Assuming hypothesis 0 is background only!
-            truth_i = 0
+        if freeze_truth_index is not None:
+            truth_i = freeze_truth_index
         else:
             truth_i = hyp_i
         ps[...,hyp_i] = 1 - (
@@ -130,14 +136,26 @@ def neyman_pvals(ts, toy_weight, on_bgonly=False, progress=False):
     return ps
 
 
+@export
+def cls_pvals(ts, toy_weight, progress=False):
+    """Compute p-value ratios used in the CLs method. 
+    First hypothesis must be background-only.
+    """
+    ps = neyman_pvals(ts, toy_weight, progress=progress)
+    ps_0 = neyman_pvals(ts, toy_weight, freeze_truth_index=0, progress=progress)
+    # PDG review has a 1- in the denominator... hm... 
+    # Don't see it in Read and Junk's original papers...??
+    return ps / ps_0
+
+
 # Higher level API, combining the above functions
 @export
 def ts_and_pvals(
         lnl, 
         toy_weight, 
-        statistic='t', 
-        cls=False,
-        interpolate_bestfit=True, 
+        statistic=DEFAULT_TEST_STATISTIC, 
+        cls=DEFAULT_CLS,
+        interpolate_bestfit=DEFAULT_INTERPOLATE_BESTFIT, 
         asymptotic=False,
         progress=False):
     """Compute frequentist test statistics and p-values for likelihood ratios
@@ -167,12 +185,50 @@ def ts_and_pvals(
     # Convert stats to p-values
     if asymptotic:
         ps = asymptotic_pvals(ts, statistic, cls=cls)
+    elif cls:
+        ps = cls_pvals(ts, toy_weight, progress=progress)
     else:
-        # Do neyman construction
         ps = neyman_pvals(ts, toy_weight, progress=progress)
-        if cls:
-            ps_0 = neyman_pvals(ts, toy_weight, on_bgonly=True, progress=progress)
-            # PDG review has a 1- in the denominator... hm... 
-            # Don't see it in Read and Junk's original papers...??
-            ps = ps / ps_0
     return ts, ps
+
+
+@export
+def single_ts_and_pvals(
+        lnl_obs, 
+        ts=None,
+        ps=None,
+        statistic=DEFAULT_TEST_STATISTIC, 
+        interpolate_bestfit=DEFAULT_INTERPOLATE_BESTFIT,
+        asymptotic_cls=DEFAULT_CLS,
+        asymptotic=False):
+    """Compute test statistic and p-value for a single outcome's likelihood
+
+    Returns: (ts, ps), arrays of test statistics and p-values, 
+        shape is (|n_hypotheses|).
+    
+    Arguments:
+     - lnl_obs: (|n_hyps|,) array of log likelihoods for one trial
+     - ts: (|n_toys|, |n_hyps|,) array of toy test statistics
+     - ps: (|n_toys|, |n_hyps|,) array of toy p-values
+     - asymptotic: If True, use asymptotic distribution of the test statistic
+     - asymptotic_cls: If True, CLs asymptotics are used if asymptotic=True
+        (Argument is not called 'cls' to avoid people feeding in Neyman p-values
+         and thinking setting this gets them Cls results.)
+    """
+    # Compute test statistic
+    # shape: (1, |n_hypotheses|)
+    t_obs = test_statistic(
+        lnl_obs[None,:], 
+        statistic=statistic, 
+        interpolate_bestfit=interpolate_bestfit)
+    if asymptotic:
+        p_obs = asymptotic_pvals(t_obs, statistic=statistic, cls=asymptotic_cls)
+    else:
+        assert ts is not None and ps is not None, "Need toy test statistics and p-values"
+        # Get index of closest toy trial (for each hypothesis)
+        # shape: (|n_hypotheses|)
+        best_trial = np.argmin(np.abs(ts - t_obs), axis=0)
+        # Get corresponding p-value from ps
+        # shape: (|n_hypotheses|)
+        p_obs = ps[best_trial, np.arange(len(best_trial))]
+    return t_obs[:,0], p_obs

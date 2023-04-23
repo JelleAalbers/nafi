@@ -11,8 +11,11 @@ from . import likelihoods
 from . import frequentist
 from .frequentist import *
 
-from . import confidence_interval
-from .confidence_interval import *
+from . import bayes
+from .bayes import *
+
+from . import intervals
+from .intervals import *
 
 from . import performance
 from .performance import *

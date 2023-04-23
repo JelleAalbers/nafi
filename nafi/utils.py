@@ -95,29 +95,32 @@ def find_root_vec(y, x=None, guess_i=None, y0=None):
 
 
 
-# Adapted from https://stackoverflow.com/a/29677616
 @export
 @jax.jit
 def weighted_quantile(values, weights, quantiles, values_sorted=False):
-    """Compute quantiles for weighted values
+    """Compute quantiles for weighted values.
+
+    Does not interpolate values: instead returns value whose probability mass
+    contains the quantile.
+    
     :param values: numpy.array with data
     :param weights: array-like of the same length as `values`
     :param quantiles: array-like with many quantiles needed.
-        Should all be in [0,1].    
+        Should all be in [0,1].
     :param values_sorted: bool, if True, then will avoid sorting of
         initial array
     :return: array with computed quantiles.
     """
     if not values_sorted:
-        sorter = jnp.argsort(values)
-        values = values[sorter]
-        weights = weights[sorter]
+        order = jnp.argsort(values)
+        values = values[order]
+        weights = weights[order]
 
-    # Original code had - 0.5 * weights here, which fails the test below
-    weighted_quantiles = jnp.cumsum(weights)
-    weighted_quantiles /= jnp.sum(weights)
-    return jnp.interp(quantiles, weighted_quantiles, values)
+    cdf = jnp.cumsum(weights)
+    cdf /= cdf[-1]
 
+    idx = jnp.searchsorted(cdf, quantiles)
+    return values[idx]
 
 
 # Sufficiently slow that jax.jit is worth it
