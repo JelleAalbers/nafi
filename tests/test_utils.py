@@ -28,6 +28,17 @@ def test_weighted_quantiles():
         values=np.array([0, 1]),
         weights=np.array([1, 1]),
         quantiles=0.5).item()
+    
+    # Extreme quantiles handled correctly
+    assert 1 == nafi.weighted_quantile(
+        values=np.array([0, 1]),
+        weights=np.array([1, 1]),
+        quantiles=1).item()
+    assert 0 == nafi.weighted_quantile(
+        values=np.array([0, 1]),
+        weights=np.array([1, 1]),
+        quantiles=0).item()
+
 
 
 def test_weighted_ps():

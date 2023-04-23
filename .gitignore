@@ -45,5 +45,3 @@ docs/_build
 # Data
 *.pkl
 *.csv
-
-notebooks/

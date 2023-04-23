@@ -1,7 +1,10 @@
 """Frequentist methods for computing p-values from likelihoods
 """
+from functools import partial
+
+import jax
+import jax.numpy as jnp
 import numpy as np
-from scipy import stats
 
 import nafi
 
@@ -13,6 +16,7 @@ DEFAULT_CLS = False
 
 
 @export
+@partial(jax.jit, static_argnames=('interpolate',))
 def maximum_likelihood(lnl, interpolate=True):
     """Return maximum likelihood, and index of best-fit hypothesis
     
@@ -21,7 +25,7 @@ def maximum_likelihood(lnl, interpolate=True):
     """
     # Find the maximum likelihood
 
-    best_i_coarse = np.argmax(lnl, axis=-1)
+    best_i_coarse = jnp.argmax(lnl, axis=-1)
     lnl_best_coarse = np.max(lnl, axis=-1)
     if not interpolate:
         return lnl_best_coarse, best_i_coarse
@@ -35,17 +39,18 @@ def maximum_likelihood(lnl, interpolate=True):
     # since the likelihood hardly changes near its minimum
     # TODO: use autodiff instead of finite differences
 
-    d_lnl_dmuindex = np.gradient(lnl, axis=-1)
+    d_lnl_dmuindex = jnp.gradient(lnl, axis=-1)
     best_i_fine = nafi.utils.find_root_vec(y=d_lnl_dmuindex, guess_i=best_i_coarse)
-    grad_at_coarse_best = np.take_along_axis(
+    grad_at_coarse_best = jnp.take_along_axis(
         arr=d_lnl_dmuindex, 
         indices=best_i_coarse[...,None], 
         axis=-1)[...,0]
-    lnl_best = lnl_best_coarse + (best_i_fine % 1) * np.abs(grad_at_coarse_best)
+    lnl_best = lnl_best_coarse + (best_i_fine % 1) * jnp.abs(grad_at_coarse_best)
     return lnl_best, best_i_fine
 
 
 @export
+@partial(jax.jit, static_argnames=('statistic', 'interpolate_bestfit'))
 def test_statistic(
         lnl, 
         statistic=DEFAULT_TEST_STATISTIC, 
@@ -74,13 +79,11 @@ def test_statistic(
         ts = -2 * (lnl - lnl_best[...,None])
         if statistic == 'q':
             # Zero excesses, i.e. hypothesis <= bestfit
-            ts *= best_i[...,None] <= np.arange(n_hyp)[None,:]
+            ts *= best_i[...,None] <= jnp.arange(n_hyp)[None,:]
     elif statistic == 'q0':
         # L(best)/L(0). Note this does not depend on the hypothesis.
         # Assuming hypothesis 0 is background only!
         ts = -2 * (lnl_best[...,None] - lnl[...,0][...,None])
-        # This is a sad memory hog, but the rest of the code is kind of stupid
-        # so we need it to work
         ts = ts.repeat(n_hyp, axis=-1)
     elif statistic == 'lep':
         # L(test)/L(0)
@@ -91,6 +94,7 @@ def test_statistic(
 
 
 @export
+@jax.jit
 def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
     """Compute asymptotic frequentist p-value for test statistics ts
     
@@ -111,38 +115,39 @@ def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
     # q's distribution has a delta function at 0, but since 0 is the lowest
     # possible value, it never contributes to the survival function.
     # The special function scipy uses here is quite expensive.
-    ps = stats.chi2(df=1).sf(ts)
+    ps = jax.scipy.stats.chi2.sf(ts, df=1)
     if statistic == 'q':
         ps *= 0.5
     return ps
 
 
 @export
-def neyman_pvals(ts, toy_weight, freeze_truth_index=None, progress=False):
-    """Compute p-values from test statistics ts using a Neyman construction"""
-    n_hyp = ts.shape[-1]
-    ps = np.zeros(ts.shape)
-    for hyp_i in nafi.utils.tqdm_maybe(progress)(
-            range(n_hyp), desc='Computing p-values', leave=False):
-        if freeze_truth_index is not None:
-            truth_i = freeze_truth_index
-        else:
-            truth_i = hyp_i
-        ps[...,hyp_i] = 1 - (
-            nafi.utils.weighted_ps(
-                ts[:,hyp_i], 
-                toy_weight[:,truth_i]
-            ).reshape(ts.shape[:-1]))
+@jax.jit
+def neyman_pvals(ts, toy_weight, freeze_truth_index=None):
+    """Compute p-values from test statistics ts using a Neyman construction
+    
+    Arguments:
+        ts: array of test statistics, shape (n_trials, n_hypotheses)
+        toy_weight: array of toy outcome weights, same shape
+        freeze_truth_index: If set, freeze the toy weights to the given 
+            hypothesis index. Useful for CLs.
+
+    """
+    if freeze_truth_index is not None:
+        # Always evaluate with _one_ true hypothesis = freeze toy weights
+        toy_weight = toy_weight[:,freeze_truth_index].repeat(ts.shape[-1], axis=-1)
+    # Compute weighted_ps independently for each hypothesis (final axis)
+    ps = 1 - jax.vmap(nafi.utils.weighted_ps, in_axes=-1, out_axes=-1)(ts, toy_weight)
     return ps
 
 
 @export
-def cls_pvals(ts, toy_weight, progress=False):
+def cls_pvals(ts, toy_weight):
     """Compute p-value ratios used in the CLs method. 
     First hypothesis must be background-only.
     """
-    ps = neyman_pvals(ts, toy_weight, progress=progress)
-    ps_0 = neyman_pvals(ts, toy_weight, freeze_truth_index=0, progress=progress)
+    ps = neyman_pvals(ts, toy_weight)
+    ps_0 = neyman_pvals(ts, toy_weight, freeze_truth_index=0)
     # PDG review has a 1- in the denominator... hm... 
     # Don't see it in Read and Junk's original papers...??
     return ps / ps_0
@@ -156,8 +161,7 @@ def ts_and_pvals(
         statistic=DEFAULT_TEST_STATISTIC, 
         cls=DEFAULT_CLS,
         interpolate_bestfit=DEFAULT_INTERPOLATE_BESTFIT, 
-        asymptotic=False,
-        progress=False):
+        asymptotic=False):
     """Compute frequentist test statistics and p-values for likelihood ratios
     
     Parameters
@@ -186,9 +190,9 @@ def ts_and_pvals(
     if asymptotic:
         ps = asymptotic_pvals(ts, statistic, cls=cls)
     elif cls:
-        ps = cls_pvals(ts, toy_weight, progress=progress)
+        ps = cls_pvals(ts, toy_weight)
     else:
-        ps = neyman_pvals(ts, toy_weight, progress=progress)
+        ps = neyman_pvals(ts, toy_weight)
     return ts, ps
 
 

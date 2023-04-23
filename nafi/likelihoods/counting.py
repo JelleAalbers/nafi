@@ -7,16 +7,19 @@ where
  - BATCH is a batch dimension
  - hypothesis_i indexes the hypothesis (signal rate)
 """
+from functools import partial
 
 import numpy as np
-from scipy import stats
+import jax
+import jax.numpy as jnp
+
 
 import nafi
 export, __all__ = nafi.exporter()
 
 
 @export
-def lnl_and_weights(mu_sig, mu_bg):
+def lnl_and_weights(mu_sig, mu_bg, n_max=None):
     """Return (logl, toy weight) for a counting experiment with background.
 
     Both are (n_outcomes, hypotheses) arrays:
@@ -27,19 +30,32 @@ def lnl_and_weights(mu_sig, mu_bg):
         mu_sig: Array with signal rate hypotheses
         mu_bg: Background rate (scalar)
     """
+    if n_max is None:
+        # Jax doesn't like this
+        n_max = mu_bg + np.max(mu_sig)
+        n_max = n_max + 5 * n_max**0.5 + 5
+    return _lnl_and_weights(mu_sig, mu_bg, n_max)
+
+
+@partial(jax.jit, static_argnames='n_max')
+def _lnl_and_weights(mu_sig, mu_bg, n_max):
     # Total expected events
     mu_tot = mu_sig + mu_bg
-    # Outcomes defined by n
-    n = np.arange(stats.poisson(mu_tot.max()).ppf(0.999)).astype(int)
-    # Probability of observation (given hypothesis)
+    # Outcomes are defined completely by the number of events, n
+    n = jnp.arange(n_max + 1, dtype=jnp.int32)
+    # Probability and log likelihood of observation (given hypothesis)
+    # and log likelihood (given hypothesis)
     # (n, mu) array
-    p = stats.poisson(mu_tot[None,:]).pmf(n[:,None])
-    # Log likelihood is now easy. 
-    # Log(0) = -inf, which will work fine, so suppress the division warning
-    with np.errstate(divide='ignore'):
-        lnl = np.log(p)
+    lnl = jax.scipy.stats.poisson.logpmf(n[:,None], mu_tot[None,:])
+    p = jnp.exp(lnl)
     # Ensure ps are normalized over n
     p /= p.sum(axis=0)
+
+    # Log likelihood is now easy. 
+    # Log(0) = -inf, which will work fine, so suppress the division warning
+    #with np.errstate(divide='ignore'):
+    #    lnl = np.log(p)
+
     return lnl, p
 
 

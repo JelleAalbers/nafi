@@ -1,18 +1,21 @@
-import numpy as np
 import nafi
 import warnings
+
+import jax
+import jax.numpy as jnp
 
 export, __all__ = nafi.exporter()
 
 
 @export
+@jax.jit
 def intervals(
         ps, hypotheses, interpolate=True, cl=0.9):
     """Convert p-values to confidence intervals
 
     Args:
-        ps (np.ndarray): p-values, shape (n_trials, n_hypotheses) or (n_hypotheses,)
-        hypotheses (np.ndarray): array of hypotheses, shape (n_hypotheses,)
+        ps: p-values, array of shape (n_trials, n_hypotheses) or (n_hypotheses,)
+        hypotheses: array of hypotheses, shape (n_hypotheses,)
         interpolate (bool): if True, use interpolation to estimate the intervals
             more precisely.
         cl (float): confidence level
@@ -28,22 +31,22 @@ def intervals(
     alpha = 1 - cl
     allowed = ps >= alpha
 
-    empty_interval = np.sum(allowed, axis=-1) == 0
-    if np.any(empty_interval):
-        warnings.warn(
-            f"Warning: {np.sum(empty_interval)} trials have empty intervals; "
-            "upper and lower limits are returned as NaN.")
+    empty_interval = jnp.sum(allowed, axis=-1) == 0
+    # if jnp.sum(empty_interval):
+    #     warnings.warn(
+    #         f"Warning: {jnp.sum(empty_interval)} trials have empty intervals; "
+    #         "upper and lower limits are returned as NaN.")
 
     # Limits = lowest & highest allowed hypothesis
     # flat (n_trials,) arrays
-    ul_i = np.argmax(
-        np.asarray(hypotheses)[None,:] * allowed,
+    ul_i = jnp.argmax(
+        jnp.asarray(hypotheses)[None,:] * allowed,
         axis=-1)
-    ll_i = np.argmin(
-        np.where(
+    ll_i = jnp.argmin(
+        jnp.where(
             allowed,
-            np.asarray(hypotheses)[None,:],
-            np.inf),
+            jnp.asarray(hypotheses)[None,:],
+            jnp.inf),
         axis=-1)
     
     # Temporarily set empty intervals to 0, so indexing works
@@ -64,11 +67,11 @@ def intervals(
         ll = nafi.utils.find_root_vec(y=ps, x=hypotheses, guess_i=(ll_i - 1).clip(0, highest_i), y0=alpha)
         # TODO: the interpolation sometimes invents discoveries even when 0 is allowed,
         # this is a rough fix:
-        ll = np.where(allowed[...,0], 0, ll)
+        ll = jnp.where(allowed[...,0], 0, ll)
 
     # Set empty intervals to NaN. Choose another method please...
-    ul = np.where(empty_interval, np.nan, ul)
-    ll = np.where(empty_interval, np.nan, ll)
+    ul = jnp.where(empty_interval, jnp.nan, ul)
+    ll = jnp.where(empty_interval, jnp.nan, ll)
 
     if single_trial:
         ul = ul[0]

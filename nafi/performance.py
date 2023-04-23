@@ -16,7 +16,7 @@ def outcome_probabilities(ll, ul, toy_weight, hypotheses):
         - bg_exclusion: exclusion of hypothesis, when hypothesis 0 is true
         - bg_exclusion_ul: same, counting only exclusions by the upper limit
     """
-    assert np.all(ll >= ul), "First argument must be the lower limits"
+    assert np.all(ll <= ul), "First argument must be the lower limits"
     empty_interval = np.isnan(ul) & np.isnan(ll)
 
     def get_p(bools):

@@ -25,6 +25,7 @@ export, __all__ = exporter(export_self=True)
 
 
 @export
+@jax.jit
 def find_root_vec(y, x=None, guess_i=None, y0=None):
     """Estimate location where y = y0. Returns an y.shape[:-1] array.
     
@@ -43,7 +44,7 @@ def find_root_vec(y, x=None, guess_i=None, y0=None):
     if y0 is not None:
         y = y - y0
     if guess_i is None:
-        guess_i = np.argmin(np.abs(y), axis=-1)
+        guess_i = jnp.argmin(jnp.abs(y), axis=-1)
     assert guess_i.shape == y.shape[:-1]
 
     largest_i = y.shape[-1] - 1
@@ -51,7 +52,7 @@ def find_root_vec(y, x=None, guess_i=None, y0=None):
     after_i = (guess_i + 1).clip(0, largest_i)
 
     before_val, guess_val, after_val = [
-        np.take_along_axis(y, indices=idx[...,None], axis=-1)[...,0]
+        jnp.take_along_axis(y, indices=idx[...,None], axis=-1)[...,0]
         for idx in (before_i, guess_i, after_i)]
 
     # TODO: fails for a few lower limits.. 
@@ -60,27 +61,27 @@ def find_root_vec(y, x=None, guess_i=None, y0=None):
     #     | (guess_i == largest_i) 
     #     | (np.sign(before_val) != np.sign(after_val)))
     
-    root_is_left = np.sign(after_val) == np.sign(guess_val)
+    root_is_left = jnp.sign(after_val) == jnp.sign(guess_val)
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore')
-        itp_i = np.where(
+        itp_i = jnp.where(
             root_is_left, 
             # before_i + (0 - before_val)/(max_val - before_val) * (max_i - before_i),
             before_i - before_val/(guess_val - before_val),
             #max_i + (0 - max_val)/(after_val - max_val) * (after_i - max_i),
             guess_i - guess_val/(after_val - guess_val),
         )
-    itp_i = np.where(root_is_left & (guess_i == 0), 0, itp_i)
-    itp_i = np.where((~root_is_left) & (guess_i == largest_i), largest_i, itp_i)
+    itp_i = jnp.where(root_is_left & (guess_i == 0), 0, itp_i)
+    itp_i = jnp.where((~root_is_left) & (guess_i == largest_i), largest_i, itp_i)
     
     # In cases where there actually is no sign change, the above gives weird results
     # Revert to the guess in this case.
-    no_change = np.sign(after_val) == np.sign(guess_val)
-    itp_i = np.where(no_change, guess_i, itp_i)
+    no_change = jnp.sign(after_val) == jnp.sign(guess_val)
+    itp_i = jnp.where(no_change, guess_i, itp_i)
     
     if x is not None:
         if x.shape == y.shape[-1:]:
-            return np.interp(x=itp_i, xp=np.arange(len(x)), fp=x)
+            return jnp.interp(x=itp_i, xp=jnp.arange(len(x)), fp=x)
         # Works, I think
         # elif x.shape == y.shape:
         #     x_before, x_guess, x_after = [
@@ -92,7 +93,6 @@ def find_root_vec(y, x=None, guess_i=None, y0=None):
         #         x_guess + (x_after - x_guess) * (itp_i - guess_i))
         raise ValueError("x and y must have matching final axis length")
     return itp_i
-
 
 
 @export
