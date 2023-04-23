@@ -43,7 +43,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     packages=setuptools.find_packages(),
     classifiers=[
-        'Development Status :: 1 -- Planning',
+        'Development Status :: 2 - Pre-Alpha',
         'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
         'Programming Language :: Python :: 3.6',

@@ -6,7 +6,9 @@ nafi
 [![Documentation Status](https://readthedocs.org/projects/nafi/badge/?version=latest)](https://nafi.readthedocs.io/en/latest/?badge=latest)
 
 Nafi computes (non-asymptotic) frequentist confidence intervals and p-values from likelihoods.
-CLs and simple Bayesian methods are also supported.
+CLs and simple Bayesian methods are also supported. 
+
+[JAX](https://github.com/google/jax) is used to some accelerate computations. Parts of nafi will be much faster if you have a GPU.
 
 Synopsis
 ============
@@ -21,7 +23,7 @@ mu_sig = np.linspace(0, 42, 200)
 
 # Get log likelihoods and weights of different (toy) outcomes
 # Insert your likelihood / simulation code here!
-from nafi.examples import counting
+from nafi.likelihoods import counting
 mu_bg = 10
 lnl, weights = counting.lnl_and_weights(mu_sig, mu_bg=10)
 
@@ -55,5 +57,3 @@ Limitations
         This is intentional. Frequentist constructions have to evaluate the likelihood of many toy datasets on a finely spaced grid of hypotheses to accurately capture sharp shifts in the test statistic distribution. Thus, there is little advantage in using an advanced, possibly fragile minimizer to find the best-fit on each toy.
         
         Similarly, recomputing the likelihood to zoom in on the p=0.1 intersection is not enough -- you must also know if and how the test statistic distribution changes. If you need more accuracy, compute new toys on a fine grid near your observed p=0.1 point.
-
- 

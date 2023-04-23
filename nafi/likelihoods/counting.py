@@ -16,7 +16,7 @@ export, __all__ = nafi.exporter()
 
 
 @export
-def get_lnl(mu_sig_hyp, mu_bg):
+def lnl_and_weights(mu_sig_hyp, mu_bg):
     """Return (logl, toy weight) for a counting experiment with background.
 
     Both are (n_outcomes, hypotheses) arrays:
@@ -51,5 +51,5 @@ def single_lnl(*, n, mu_sig, mu_bg):
         mu_bg: Background rate (scalar)
     """
     # This is slow... but it doesn't matter for this simple toy.
-    lnl, _ = get_lnl(mu_sig, mu_bg)
+    lnl, _ = lnl_and_weights(mu_sig, mu_bg)
     return lnl[n]

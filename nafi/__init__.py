@@ -8,8 +8,8 @@ from .utils import *
 
 from . import likelihoods
 
-from . import l_to_p
-from .l_to_p import *
+from . import frequentist
+from .frequentist import *
 
 from . import confidence_interval
 from .confidence_interval import *

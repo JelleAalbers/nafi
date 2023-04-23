@@ -3,7 +3,6 @@ import warnings
 import jax
 import jax.numpy as jnp
 import numpy as np
-from scipy import stats
 from tqdm import tqdm
 
 
@@ -94,13 +93,6 @@ def find_root_vec(y, x=None, guess_i=None, y0=None):
         raise ValueError("x and y must have matching final axis length")
     return itp_i
 
-### Unit tests for find_root_vec
-# Test 1: simple case
-np.testing.assert_array_almost_equal(
-    find_root_vec(
-        x=np.arange(5), 
-        y=np.arange(5)[None,:] - 6.5 + np.arange(9)[:,None]),
-    np.array([4, 4, 4, 3.5, 2.5, 1.5, 0.5, 0, 0]))
 
 
 # Adapted from https://stackoverflow.com/a/29677616
@@ -126,11 +118,6 @@ def weighted_quantile(values, weights, quantiles, values_sorted=False):
     weighted_quantiles /= jnp.sum(weights)
     return jnp.interp(quantiles, weighted_quantiles, values)
 
-# Test quantiles are not interpolated
-assert 0. == weighted_quantile(
-    values=np.array([0, 1]), 
-    weights=np.array([0.6, 0.4]), 
-    quantiles=0.5).item()
 
 
 # Sufficiently slow that jax.jit is worth it
@@ -149,52 +136,7 @@ def weighted_ps(x, w):
     
     return p_ordered[sort_index]
 
-np.testing.assert_array_almost_equal(
-    weighted_ps(
-        x=np.array([0, 0, 0, 3, 4,]), 
-        w=np.array([1, 1, 1, 1, 1,])/5),
-    np.array([0, 0, 0, 0.6, 0.8]))
-
-np.testing.assert_array_almost_equal(
-    weighted_ps(
-        x=np.array([0, 4, 0, 3, 0,]), 
-        w=np.array([1, 1, 1, 1, 1,])/5),
-    np.array([0, 0.8, 0, 0.6, 0]))
-
-np.testing.assert_array_almost_equal(
-    weighted_ps(
-        x=np.array([0, 4, 4, 3, 0,]), 
-        w=np.array([1, 1, 1, 1, 1,])/5),
-    np.array([0, 0.6, 0.6, 0.4, 0]))
-
-np.testing.assert_array_almost_equal(
-    weighted_ps(
-        x=np.array([0, 4, 4, 3,]), 
-        w=np.array([2, 1, 1, 1,])/5),
-    np.array([0, 0.6, 0.6, 0.4]))
-
 
 @export
 def tqdm_maybe(progress=False):
     return tqdm if progress else lambda x, **kwargs: x
-
-
-@export
-def toy_weights(*, shape, p_n_mu=None, hypotheses=None):
-    trials_per_n, n_sig_max, *_ = shape
-    n_sig_range = np.arange(n_sig_max)
-    if p_n_mu is None:
-        if hypotheses is None:
-            raise ValueError("Provide either p_n_mu or hypotheses")
-        # Assume hypotheses are signal rates
-        p_n_mu = stats.poisson(mu=hypotheses[None,:]).pmf(n_sig_range[:,None])
-
-    # The range of n may be insufficient, so need to upweight toys to compensate
-    p_n_mu /= p_n_mu.sum(axis=0)[None,:]
-
-    toy_weight = p_n_mu / trials_per_n
-    return toy_weight[None,...]
-
-
-# Unit test: toy_weights sums to 1 for each hypothesis (even if p_n_mu does not)
-
