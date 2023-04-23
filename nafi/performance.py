@@ -7,7 +7,7 @@ export, __all__ = nafi.exporter()
 
 
 @export
-def outcome_probabilities(ul, ll, toy_weight, hypotheses):
+def outcome_probabilities(ll, ul, toy_weight, hypotheses):
     """Returns dict with probabilities (n_hypotheses arrays) of:
         - mistake: false exclusion of the hypotheses when it is true
         - mistake_ul: same, counting only exclusions by the upper limit
@@ -16,6 +16,7 @@ def outcome_probabilities(ul, ll, toy_weight, hypotheses):
         - bg_exclusion: exclusion of hypothesis, when hypothesis 0 is true
         - bg_exclusion_ul: same, counting only exclusions by the upper limit
     """
+    assert np.all(ll >= ul), "First argument must be the lower limits"
     empty_interval = np.isnan(ul) & np.isnan(ll)
 
     def get_p(bools):
@@ -60,36 +61,30 @@ def outcome_probabilities(ul, ll, toy_weight, hypotheses):
 
 
 @export
-def brazil_band(ul, ll, toy_weight, progress=False, return_dict=True):
-    """Return sensitivity quantiles for the upper and lower limits.
+def brazil_band(limits, toy_weight, return_array=False,
+                sigmas=(-2, -1, 0, 1, 2), progress=False):
+    """Return a dictionary with "Brazil band" quantiles.
+    Keys are the five sigma levels, e.g. -1 gives the -1σ quantile 
+    (the 15.8th percentile).
 
     Arguments:
-     - ul, ll: upper and lower limits of the confidence intervals
-     - toy_weight: weights of the toys
+     - limits: Upper (or lower) limits, shape (n_trials, n_hypotheses)
+     - toy_weight: weights of the toys, shape (n_trials, n_hypotheses)
+     - sigmas: sequence of sigma levels to compute. Default is (-2, -1, 0, 1, 2)
+     - return_array: if False, instead returns a (n_hyp, 5) array,
+       with the second axis running over levels (index 0 = -2σ, 1 = -1σ, etc)
      - progress: whether to show a progress bar
-     - return_dict: if True (default), returns two dict with keys -2, -1, 0, 1, 2
-        containing the sensitivity quantiles at -2 sigma, -1 sigma, etc.
-        Otherwise returns a (n_hyp, 5) array, with the second axis containing
-        the same quantiles in the same order.
-
     """
     n_hyp = toy_weight.shape[-1]
-    sigmas = np.array([-2, -1, 0, 1, 2])
+    sigmas = np.array(sigmas)
     n_sigmas = len(sigmas)
     quantiles = stats.norm.cdf(sigmas)
-    sensi_ll = np.zeros((n_hyp, n_sigmas))
-    sensi_ul = np.zeros((n_hyp, n_sigmas))
+    sensi = np.zeros((n_hyp, n_sigmas))
     for mu_i in nafi.utils.tqdm_maybe(progress)(
             range(n_hyp), desc='Computing sensitivity quantiles', leave=False):
         weights = toy_weight[...,mu_i].ravel()
-        sensi_ul[mu_i] = nafi.utils.weighted_quantile(
-            values=ul.ravel(), quantiles=quantiles, weights=weights)
-        sensi_ll[mu_i] = nafi.utils.weighted_quantile(
-            values=ll.ravel(), quantiles=quantiles, weights=weights)
-    if not return_dict:
-        return sensi_ll, sensi_ul
-    # TODO: deduplicate
-    sensi_ll = {sigma: sensi for sigma, sensi in zip(sigmas, sensi_ll.T)}
-    sensi_ul = {sigma: sensi for sigma, sensi in zip(sigmas, sensi_ul.T)}
-    return sensi_ll, sensi_ul
-    
+        sensi[mu_i] = nafi.utils.weighted_quantile(
+            values=limits.ravel(), quantiles=quantiles, weights=weights)
+    if return_array:
+        return sensi
+    return {sigma: sensi for sigma, sensi in zip(sigmas, sensi.T)}  

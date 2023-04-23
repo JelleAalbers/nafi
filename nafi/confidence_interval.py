@@ -4,6 +4,7 @@ import warnings
 
 export, __all__ = nafi.exporter()
 
+
 @export
 def intervals(
         ps, hypotheses, interpolate=True, cl=0.9):

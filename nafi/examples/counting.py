@@ -15,6 +15,7 @@ import nafi
 export, __all__ = nafi.exporter()
 
 
+@export
 def get_lnl(mu_sig_hyp, mu_bg):
     """Return (logl, toy weight) for a counting experiment with background.
 
@@ -38,3 +39,17 @@ def get_lnl(mu_sig_hyp, mu_bg):
     # Ensure ps are normalized over n
     p /= p.sum(axis=0)
     return lnl, p
+
+
+@export
+def single_lnl(*, n, mu_sig, mu_bg):
+    """Return log likelihood for a single counting experiment observation
+
+    Arguments:
+        n: Observed number of events
+        mu_sig: Signal rate hypothesis (array)
+        mu_bg: Background rate (scalar)
+    """
+    # This is slow... but it doesn't matter for this simple toy.
+    lnl, _ = get_lnl(mu_sig, mu_bg)
+    return lnl[n]
