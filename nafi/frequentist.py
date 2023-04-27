@@ -121,8 +121,12 @@ def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
     return ps
 
 
+# Bit of a hack to use static_argnames for freeze_truth_index;
+# it's fine as long as None or 0 are reasonable values, but if people
+# try varying the freezing in some kind of loop, it will trigger
+# unexpected recompilation
 @export
-@jax.jit
+@partial(jax.jit, static_argnames=('freeze_truth_index',))
 def neyman_pvals(ts, toy_weight, freeze_truth_index=None):
     """Compute p-values from test statistics ts using a Neyman construction
     
@@ -133,24 +137,51 @@ def neyman_pvals(ts, toy_weight, freeze_truth_index=None):
             hypothesis index. Useful for CLs.
 
     """
+    # For some reason, vmap over in_axis=0 is much faster than in_axis=-1 and 
+    # transposing the inputs... hm....
     if freeze_truth_index is not None:
-        # Always evaluate with _one_ true hypothesis = freeze toy weights
-        toy_weight = toy_weight[:,freeze_truth_index].repeat(ts.shape[-1], axis=-1)
-    # Compute weighted_ps independently for each hypothesis (final axis)
-    ps = 1 - jax.vmap(nafi.utils.weighted_ps, in_axes=-1, out_axes=-1)(ts, toy_weight)
+        # Always evaluate with _one_ true hypothesis
+        toy_weight = toy_weight[:,freeze_truth_index]
+        ps = jax.vmap(nafi.utils.weighted_ps, in_axes=(0, None))(ts.T, toy_weight).T
+    else:
+        # Compute weighted_ps independently for each hypothesis (final axis)
+        ps = jax.vmap(nafi.utils.weighted_ps, in_axes=0)(ts.T, toy_weight.T).T
+    return 1 - ps
+
+
+def neyman_pvals_nojax(ts, toy_weight, freeze_truth_index=None, progress=False):
+    """Compute p-values from test statistics ts using a Neyman construction"""
+    n_hyp = ts.shape[-1]
+    ps = np.zeros(ts.shape)
+    for hyp_i in nafi.utils.tqdm_maybe(progress)(
+            range(n_hyp), desc='Computing p-values', leave=False):
+        if freeze_truth_index is not None:
+            truth_i = freeze_truth_index
+        else:
+            truth_i = hyp_i
+        ps[...,hyp_i] = 1 - (
+            nafi.utils.weighted_ps(
+                ts[:,hyp_i], 
+                toy_weight[:,truth_i]
+            ).reshape(ts.shape[:-1]))
     return ps
 
 
 @export
-def cls_pvals(ts, toy_weight):
+def cls_pvals(ts, toy_weight, neyman_ps=None):
     """Compute p-value ratios used in the CLs method. 
     First hypothesis must be background-only.
     """
-    ps = neyman_pvals(ts, toy_weight)
+    if neyman_ps is None:
+        neyman_ps = neyman_pvals(ts, toy_weight)
     ps_0 = neyman_pvals(ts, toy_weight, freeze_truth_index=0)
-    # PDG review has a 1- in the denominator... hm... 
-    # Don't see it in Read and Junk's original papers...??
-    return ps / ps_0
+    # PDG review and other CLs texts have a 1- in the denominator
+    # because they define "p_b" to be a CDF value (integrate distribution 
+    # from -inf to the observed value), unlike "p_{s+b}".
+    # Our ps are both survival function values (integrate distribution from
+    # observed value to +inf)
+    np.where(ps_0 == 0, )
+    return neyman_ps / ps_0
 
 
 # Higher level API, combining the above functions
@@ -229,10 +260,11 @@ def single_ts_and_pvals(
         p_obs = asymptotic_pvals(t_obs, statistic=statistic, cls=asymptotic_cls)
     else:
         assert ts is not None and ps is not None, "Need toy test statistics and p-values"
-        # Get index of closest toy trial (for each hypothesis)
+        # Get index of toy trial with the same (or a very close) test statistic
+        # (for each hypothesis)
         # shape: (|n_hypotheses|)
-        best_trial = np.argmin(np.abs(ts - t_obs), axis=0)
+        closest_trial = np.argmin(np.abs(ts - t_obs), axis=0)
         # Get corresponding p-value from ps
         # shape: (|n_hypotheses|)
-        p_obs = ps[best_trial, np.arange(len(best_trial))]
+        p_obs = ps[closest_trial, np.arange(len(closest_trial))]
     return t_obs[:,0], p_obs

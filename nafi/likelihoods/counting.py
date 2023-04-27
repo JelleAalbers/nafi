@@ -31,9 +31,9 @@ def lnl_and_weights(mu_sig, mu_bg, n_max=None):
         mu_bg: Background rate (scalar)
     """
     if n_max is None:
-        # Jax doesn't like this
-        n_max = mu_bg + np.max(mu_sig)
-        n_max = n_max + 5 * n_max**0.5 + 5
+        # Can't do dynamic shapes inside jitted jax functions, so we have to
+        # fix a max n in this ugly wrapper function
+        n_max = nafi.large_n_for_mu(mu_bg + np.max(mu_sig))
     return _lnl_and_weights(mu_sig, mu_bg, n_max)
 
 

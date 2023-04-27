@@ -19,8 +19,8 @@ def test_synopsis():
     # Check results remain those quoted in the README
     # (up to some lower accuracy, we only sdid 0.1 hypothesis spacing here)
     np.testing.assert_almost_equal(round(p_obs[0], 4), 0.0270)
-    np.testing.assert_almost_equal(round(ll_obs, 1), 1.8)
-    np.testing.assert_almost_equal(round(ul_obs, 1), 15.1)
-    np.testing.assert_almost_equal(round(brazil[0][0], 1), 6.6)
-    np.testing.assert_almost_equal(round(brazil[-1][0], 1), 3.1)
-    np.testing.assert_almost_equal(round(brazil[+1][0], 1), 10.1)
+    np.testing.assert_almost_equal(round(ll_obs, 1), 1.8, decimal=3)
+    np.testing.assert_almost_equal(round(ul_obs, 1), 15.1, decimal=3)
+    np.testing.assert_almost_equal(round(brazil[0][0], 1), 6.6, decimal=3)
+    np.testing.assert_almost_equal(round(brazil[-1][0], 1), 3.1, decimal=3)
+    np.testing.assert_almost_equal(round(brazil[+1][0], 1), 10.1, decimal=3)

@@ -1,9 +1,12 @@
+import jax
+import jax.numpy as jnp
 import numpy as np
-
-from scipy import stats
 
 import nafi
 export, __all__ = nafi.exporter()
+
+
+SIGMAS = np.array([-2, -1, 0, 1, 2])
 
 
 @export
@@ -61,33 +64,40 @@ def outcome_probabilities(ll, ul, toy_weight, hypotheses):
 
 
 @export
-def brazil_band(limits, toy_weight, return_array=False,
-                sigmas=(-2, -1, 0, 1, 2), progress=False):
+def brazil_band(limits, toy_weight, return_array=False):
     """Return a dictionary with "Brazil band" quantiles.
     Keys are the five sigma levels, e.g. -1 gives the -1σ quantile 
     (the 15.8th percentile).
 
     Arguments:
-     - limits: Upper (or lower) limits, shape (n_trials, n_hypotheses)
+     - limits: Upper (or lower) limits, shape (n_trials,)
      - toy_weight: weights of the toys, shape (n_trials, n_hypotheses)
-     - sigmas: sequence of sigma levels to compute. Default is (-2, -1, 0, 1, 2)
      - return_array: if False, instead returns a (n_hyp, 5) array,
        with the second axis running over levels (index 0 = -2σ, 1 = -1σ, etc)
      - progress: whether to show a progress bar
     """
-    n_hyp = toy_weight.shape[-1]
-    sigmas = np.array(sigmas)
-    n_sigmas = len(sigmas)
-    quantiles = stats.norm.cdf(sigmas)
-    sensi = np.zeros((n_hyp, n_sigmas))
-    
-    # TODO sort once
-
-    for mu_i in nafi.utils.tqdm_maybe(progress)(
-            range(n_hyp), desc='Computing sensitivity quantiles', leave=False):
-        weights = toy_weight[...,mu_i].ravel()
-        sensi[mu_i] = nafi.utils.weighted_quantile(
-            values=limits.ravel(), quantiles=quantiles, weights=weights)
+    sensi = _brazil_band(limits, toy_weight, SIGMAS)
     if return_array:
         return sensi
-    return {sigma: sensi for sigma, sensi in zip(sigmas, sensi.T)}  
+    return {sigma: sensi for sigma, sensi in zip(SIGMAS.tolist(), sensi.T)}
+
+
+@jax.jit
+def _brazil_band(limits, toy_weight, sigmas):
+    quantiles = jax.scipy.stats.norm.cdf(sigmas)
+
+    # Sort once, we need the same order every hypothesis in the vmap
+    sort_order = jnp.argsort(limits)
+    sorted_limits = limits[sort_order]
+    sorted_weights = toy_weight[sort_order, :]
+
+    # vmap over hypotheses
+    sensi = jax.vmap(
+        nafi.utils.weighted_quantile_sorted,
+        in_axes=(None, 1, None),
+        )(
+            sorted_limits, 
+            sorted_weights,
+            quantiles,
+        )
+    return sensi

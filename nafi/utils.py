@@ -1,3 +1,4 @@
+from functools import partial
 import warnings
 
 import jax
@@ -96,7 +97,7 @@ def find_root_vec(y, x=None, guess_i=None, y0=None):
 
 @export
 @jax.jit
-def weighted_quantile(values, weights, quantiles, values_sorted=False):
+def weighted_quantile(values, weights, quantiles):
     """Compute quantiles for weighted values.
 
     Does not interpolate values: instead returns value whose probability mass
@@ -106,23 +107,23 @@ def weighted_quantile(values, weights, quantiles, values_sorted=False):
     :param weights: array-like of the same length as `values`
     :param quantiles: array-like with many quantiles needed.
         Should all be in [0,1].
-    :param values_sorted: bool, if True, then will avoid sorting of
-        initial array
     :return: array with computed quantiles.
     """
-    if not values_sorted:
-        order = jnp.argsort(values)
-        values = values[order]
-        weights = weights[order]
+    order = jnp.argsort(values)
+    values = values[order]
+    weights = weights[order]
+    return weighted_quantile_sorted(values, weights, quantiles)
 
+
+@export
+@jax.jit
+def weighted_quantile_sorted(values, weights, quantiles):
     cdf = jnp.cumsum(weights)
     cdf /= cdf[-1]
-
     idx = jnp.searchsorted(cdf, quantiles)
     return values[idx]
 
 
-# Sufficiently slow that jax.jit is worth it
 @export
 @jax.jit
 def weighted_ps(x, w):
@@ -142,3 +143,8 @@ def weighted_ps(x, w):
 @export
 def tqdm_maybe(progress=False):
     return tqdm if progress else lambda x, **kwargs: x
+
+
+@export
+def large_n_for_mu(mu):
+    return int(mu + 5 * mu**0.5 + 5)

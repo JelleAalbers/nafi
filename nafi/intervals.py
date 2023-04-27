@@ -1,5 +1,6 @@
+from functools import partial
+
 import nafi
-import warnings
 
 import jax
 import jax.numpy as jnp
@@ -8,7 +9,7 @@ export, __all__ = nafi.exporter()
 
 
 @export
-@jax.jit
+@partial(jax.jit, static_argnames=('interpolate',))
 def intervals(
         ps, hypotheses, interpolate=True, cl=0.9):
     """Convert p-values to confidence intervals
