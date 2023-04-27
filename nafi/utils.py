@@ -131,10 +131,12 @@ def weighted_ps(x, w):
     order = jnp.argsort(x)
     
     # P of getting a x lower in the sort order
-    p_ordered = jnp.cumsum(w[order]) - w[order]
+    w_ordered = w[order]
+    p_ordered = jnp.cumsum(w_ordered) - w_ordered
     
-    # Indices where you would place each t in sorted array
-    # If all t are distinct, this is equal to the rank_order
+    # Indices where you would place each x in sorted array
+    # If all t are distinct, this is equal to the rank order
+    # = jnp.argsort(order) ?
     sort_index = jnp.searchsorted(x[order], x)#.clip(0, len(x))
     
     return p_ordered[sort_index]

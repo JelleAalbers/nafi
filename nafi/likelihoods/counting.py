@@ -29,6 +29,8 @@ def lnl_and_weights(mu_sig, mu_bg, n_max=None):
     Arguments:
         mu_sig: Array with signal rate hypotheses
         mu_bg: Background rate (scalar)
+        n_max: Largest number of events to consider. If None, will be
+            determined automatically from mu_sig and mu_bg.
     """
     if n_max is None:
         # Can't do dynamic shapes inside jitted jax functions, so we have to
