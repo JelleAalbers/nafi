@@ -15,6 +15,16 @@ DEFAULT_INTERPOLATE_BESTFIT = False
 DEFAULT_CLS = False
 
 
+@jax.jit
+def _parabola_vertex(x1, y1, x2, y2, x3, y3):
+    # From https://stackoverflow.com/a/717833
+    denom = (x1 - x2) * (x1 - x3) * (x2 - x3)
+    A     = (x3 * (y2 - y1) + x2 * (y1 - y3) + x1 * (y3 - y2)) / denom
+    B     = (x3*x3 * (y1 - y2) + x2*x2 * (y3 - y1) + x1*x1 * (y2 - y3)) / denom
+    C     = (x2 * x3 * (x2 - x3) * y1 + x3 * x1 * (x3 - x1) * y2 + x1 * x2 * (x1 - x2) * y3) / denom
+    return -B / (2*A), C - B*B / (4*A)
+
+
 @export
 @partial(jax.jit, static_argnames=('interpolate',))
 def maximum_likelihood(lnl, interpolate=True):
@@ -22,12 +32,40 @@ def maximum_likelihood(lnl, interpolate=True):
     
     Returns two (|trials|, |n_sig|) arrays: the bestfit likelihood ratio and
     index of best-fit hypothesis.
-    """
-    # TODO: interpolation
-    best_i_coarse = jnp.argmax(lnl, axis=-1)
-    lnl_best_coarse = np.max(lnl, axis=-1)
-    return lnl_best_coarse, best_i_coarse
 
+    If interpolate, bestfit likelihood is interpolated parabolically
+        when it is not at the edge of the likelihood curve.
+        The index remains an integer, and is unchanged.
+    """
+    n_outcomes, n_hyp = lnl.shape
+    i = jnp.argmax(lnl, axis=-1)
+    y = lnl[jnp.arange(n_outcomes), i]
+
+    if not interpolate:
+        return y, i
+
+    # Jax auto-clamps indices, so this won't crash
+    y_prev = lnl[jnp.arange(n_outcomes), i - 1]
+    y_next = lnl[jnp.arange(n_outcomes), i + 1]
+    i_itp, y_itp = _parabola_vertex(i - 1, y_prev, i, y, i + 1, y_next)
+    # Return interpolated solution only if all the following hold:
+    #   * The original i was not at the edge of the likelihood curve
+    #     (in which case points left or right of it are missing)
+    #   * i_itp is within [i-1, i+1], i.e. we are not extrapolating
+    #   * y_itp is higher than y (it improves the fit)
+    # The last two shouldn't really be necessary if the interpolation is
+    # working correctly, but I don't know what kinds of mad likelihoods
+    # people will throw at this...
+    y = jnp.where(
+        (
+            (i > 0) & (i < n_hyp)
+            & (i_itp < i + 1)
+            & (y_itp > y)
+        ),
+        y_itp,
+        y
+    )
+    return y, i
 
 
 @export
