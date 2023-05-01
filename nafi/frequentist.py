@@ -23,30 +23,11 @@ def maximum_likelihood(lnl, interpolate=True):
     Returns two (|trials|, |n_sig|) arrays: the bestfit likelihood ratio and
     index of best-fit hypothesis.
     """
-    # Find the maximum likelihood
-
+    # TODO: interpolation
     best_i_coarse = jnp.argmax(lnl, axis=-1)
     lnl_best_coarse = np.max(lnl, axis=-1)
-    if not interpolate:
-        return lnl_best_coarse, best_i_coarse
+    return lnl_best_coarse, best_i_coarse
 
-    # Just doing linear interpolation won't find a better fit;
-    # it would always find the same point as the coarse search.
-    # All the work, if any, is done by np.gradient here.
-
-    # Estimate the maximum likelihood slightly more refined using interpolation
-    # Probably this makes absolutely zero difference, 
-    # since the likelihood hardly changes near its minimum
-    # TODO: use autodiff instead of finite differences
-
-    d_lnl_dmuindex = jnp.gradient(lnl, axis=-1)
-    best_i_fine = nafi.utils.find_root_vec(y=d_lnl_dmuindex, guess_i=best_i_coarse)
-    grad_at_coarse_best = jnp.take_along_axis(
-        arr=d_lnl_dmuindex, 
-        indices=best_i_coarse[...,None], 
-        axis=-1)[...,0]
-    lnl_best = lnl_best_coarse + (best_i_fine % 1) * jnp.abs(grad_at_coarse_best)
-    return lnl_best, best_i_fine
 
 
 @export

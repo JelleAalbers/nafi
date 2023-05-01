@@ -3,14 +3,6 @@ import numpy as np
 import nafi
 
 
-def test_find_root_vec():
-    np.testing.assert_array_almost_equal(
-        nafi.find_root_vec(
-            x=np.arange(5), 
-            y=np.arange(5)[None,:] - 6.5 + np.arange(9)[:,None]),
-        np.array([4, 4, 4, 3.5, 2.5, 1.5, 0.5, 0, 0]))
-
-
 def test_weighted_quantiles():
     # Ensure quantiles are not interpolated
     # (quantiles should be real existing values in the dataset)
