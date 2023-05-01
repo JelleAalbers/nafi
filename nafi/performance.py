@@ -10,6 +10,7 @@ SIGMAS = np.array([-2, -1, 0, 1, 2])
 
 
 @export
+@jax.jit
 def outcome_probabilities(ll, ul, toy_weight, hypotheses):
     """Returns dict with probabilities (n_hypotheses arrays) of:
         - mistake: false exclusion of the hypotheses when it is true
@@ -19,15 +20,14 @@ def outcome_probabilities(ll, ul, toy_weight, hypotheses):
         - bg_exclusion: exclusion of hypothesis, when hypothesis 0 is true
         - bg_exclusion_ul: same, counting only exclusions by the upper limit
     """
-    assert np.all(ll <= ul), "First argument must be the lower limits"
-    empty_interval = np.isnan(ul) & np.isnan(ll)
+    empty_interval = jnp.isnan(ul) & jnp.isnan(ll)
 
     def get_p(bools):
         if len(bools.shape) == 1:
             # Things like empty interval don't depend on the hypothesis,
             # except through weighting of the toys
             bools = bools[:,None]
-        return np.sum(bools * toy_weight, axis=0)
+        return jnp.sum(bools * toy_weight, axis=0)
 
     # Compute P(mu excluded | mu is true) -- i.e. coverage
     ul_is_ok = hypotheses[None,:] <= ul[:,None]
@@ -40,9 +40,9 @@ def outcome_probabilities(ll, ul, toy_weight, hypotheses):
     # is there a more memory-efficient solution?
     ll_allows_mu = ll[:,None] <= hypotheses[None,:]
     ul_allows_mu = hypotheses[None,:] <= ul[:,None]
-    p_excl_bg = 1 - np.average(
+    p_excl_bg = 1 - jnp.average(
         ll_allows_mu & ul_allows_mu, weights=toy_weight[:,0], axis=0)
-    p_excl_bg_ul = 1 - np.average(
+    p_excl_bg_ul = 1 - jnp.average(
         ul_allows_mu, weights=toy_weight[:,0], axis=0)
 
     # Compute P(0 excluded | mu is true) -- only need lower limits

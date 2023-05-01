@@ -122,8 +122,7 @@ def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
 
 
 # Bit of a hack to use static_argnames for freeze_truth_index;
-# it's fine as long as None or 0 are reasonable values, but if people
-# try varying the freezing in some kind of loop, it will trigger
+# if people try varying the freezing in some kind of loop, it will trigger
 # unexpected recompilation
 @export
 @partial(jax.jit, static_argnames=('freeze_truth_index',))

@@ -69,6 +69,8 @@ def intervals(
         # TODO: the interpolation sometimes invents discoveries even when 0 is allowed,
         # this is a rough fix:
         ll = jnp.where(allowed[...,0], 0, ll)
+        # TODO: ... and it sometimes gives NaN. Really need to fix this.
+        ll = jnp.where(jnp.isnan(ll), 0, ll)
 
     # Set empty intervals to NaN. Choose another method please...
     ul = jnp.where(empty_interval, jnp.nan, ul)

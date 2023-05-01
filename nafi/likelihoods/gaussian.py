@@ -2,8 +2,6 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-import numpy as np
-
 import nafi
 export, __all__ = nafi.exporter()
 
