@@ -26,73 +26,46 @@ export, __all__ = exporter(export_self=True)
 
 @export
 @jax.jit
-def find_root_vec(y, x=None, guess_i=None, y0=None):
-    """Estimate location where y = y0. Returns an y.shape[:-1] array.
-    
-    If x is provided, it should match the last dimension of x.
-        The result will be the x-value at which y = y0.
-    Otherwise, return index into an x-array you provide later.
+def find_root_vec(y, x, guess_i):
+    """Estimate location where y(x) = 0. Returns an y.shape[:-1] array.
 
     Arguments:
      - y: array of values
      - x: if specified, instead of returning interpolated index,
           interpolate return value linearly in x.
-     - guess_i: index at which to start searching.
-           If not provided, will use argmin(abs(y), axis=-1)
-     - y0: will be subtracted from y before finding root
+     - guess_i: index around which to search for root
+        Will look at one value before and one value after.
     """
-    if y0 is not None:
-        y = y - y0
-    if guess_i is None:
-        guess_i = jnp.argmin(jnp.abs(y), axis=-1)
-    assert guess_i.shape == y.shape[:-1]
+    di = jnp.arange(-1, 2)
 
-    largest_i = y.shape[-1] - 1
-    before_i = (guess_i - 1).clip(0, largest_i)
-    after_i = (guess_i + 1).clip(0, largest_i)
+    # Search only in 3-value slice around guess_i
+    # (I'm sure there is a numpy indexing trick to do this without vmap...)
+    # Shape (n_x, 3)
+    i = guess_i[:,None] + di[None,:]
+    illegal = (i < 0) | (i >= len(x))
+    i = jnp.clip(i, 0, len(x)-1)
+    y_slice = jax.vmap(jnp.take)(y, i)
+    x_slice = x[i]
 
-    before_val, guess_val, after_val = [
-        jnp.take_along_axis(y, indices=idx[...,None], axis=-1)[...,0]
-        for idx in (before_i, guess_i, after_i)]
+    # For illegal indices, set both x and y value to NaN
+    # (especially NaNing x is important; otherwise interp gets a multi-valued
+    #   function, in which case its behaviour is weird)
+    y_slice = jnp.where(illegal, jnp.nan, y_slice)
+    x_slice = jnp.where(illegal, jnp.nan, x_slice)
 
-    # TODO: fails for a few lower limits.. 
-    # assert np.all(
-    #     (guess_i == 0) 
-    #     | (guess_i == largest_i) 
-    #     | (np.sign(before_val) != np.sign(after_val)))
-    
-    root_is_left = jnp.sign(after_val) == jnp.sign(guess_val)
-    with warnings.catch_warnings():
-        warnings.filterwarnings('ignore')
-        itp_i = jnp.where(
-            root_is_left, 
-            # before_i + (0 - before_val)/(max_val - before_val) * (max_i - before_i),
-            before_i - before_val/(guess_val - before_val),
-            #max_i + (0 - max_val)/(after_val - max_val) * (after_i - max_i),
-            guess_i - guess_val/(after_val - guess_val),
+    # jnp.interp assumes x-values are sorted. :-(
+    # So we need to sort them first.
+    sort_index = jnp.argsort(x_slice, axis=-1)
+    y_slice = jnp.take_along_axis(y_slice, sort_index, axis=-1)
+    x_slice = jnp.take_along_axis(x_slice, sort_index, axis=-1)
+
+    # jax.debug.print("i={i}, xslice={x_slice}, yslice={yslice}", i=i[32], x_slice=x_slice[32], yslice=y_slice[32])
+    # Find x-value where y(x) = 0 
+    return jax.vmap(jnp.interp, in_axes=(None, 0, 0))(
+        0,                # x
+        y_slice,          # xp
+        x_slice,          # fp
         )
-    itp_i = jnp.where(root_is_left & (guess_i == 0), 0, itp_i)
-    itp_i = jnp.where((~root_is_left) & (guess_i == largest_i), largest_i, itp_i)
-    
-    # In cases where there actually is no sign change, the above gives weird results
-    # Revert to the guess in this case.
-    no_change = jnp.sign(after_val) == jnp.sign(guess_val)
-    itp_i = jnp.where(no_change, guess_i, itp_i)
-    
-    if x is not None:
-        if x.shape == y.shape[-1:]:
-            return jnp.interp(x=itp_i, xp=jnp.arange(len(x)), fp=x)
-        # Works, I think
-        # elif x.shape == y.shape:
-        #     x_before, x_guess, x_after = [
-        #         np.take_along_axis(x, indices=idx[...,None], axis=-1)[...,0]
-        #         for idx in (before_i, guess_i, after_i)]
-        #     return np.where(
-        #         root_is_left,
-        #         x_before + (x_guess - x_before) * (itp_i - before_i),
-        #         x_guess + (x_after - x_guess) * (itp_i - guess_i))
-        raise ValueError("x and y must have matching final axis length")
-    return itp_i
 
 
 @export

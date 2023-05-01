@@ -28,6 +28,11 @@ def intervals(
     if single_trial:
         ps = ps[None,:]
 
+    # Do not allow hypotheses with p-values of NaN
+    # (without this, the interpolation gets into trouble if p-values are e.g.
+    #  NaN, 1, NaN)
+    ps = jnp.nan_to_num(ps)
+
     # is hyp allowed by the trial?  (|trials|,|mu|)
     alpha = 1 - cl
     allowed = ps >= alpha
@@ -60,17 +65,12 @@ def intervals(
         ll = hypotheses[ll_i]
 
     else:
-        # TODO: if we add +1 offset, get a bit of overcoverage. Why?
-        ul = nafi.utils.find_root_vec(y=ps, x=hypotheses, guess_i=ul_i, y0=alpha)
-        # TODO: there are some bugs here...
-        # TODO: the -1 offset seems necessary to guarantee ll <= ll_coarse. But why?
+        ul = nafi.utils.find_root_vec(y=ps - alpha, x=hypotheses, guess_i=ul_i)
         highest_i = len(hypotheses) - 1
-        ll = nafi.utils.find_root_vec(y=ps, x=hypotheses, guess_i=(ll_i - 1).clip(0, highest_i), y0=alpha)
-        # TODO: the interpolation sometimes invents discoveries even when 0 is allowed,
-        # this is a rough fix:
-        ll = jnp.where(allowed[...,0], 0, ll)
-        # TODO: ... and it sometimes gives NaN. Really need to fix this.
-        ll = jnp.where(jnp.isnan(ll), 0, ll)
+        ll = nafi.utils.find_root_vec(
+            y=ps - alpha,
+            x=hypotheses, 
+            guess_i=(ll_i).clip(0, highest_i))
 
     # Set empty intervals to NaN. Choose another method please...
     ul = jnp.where(empty_interval, jnp.nan, ul)
