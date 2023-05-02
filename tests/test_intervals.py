@@ -18,7 +18,6 @@ def test_intervals():
     _, ps = nafi.ts_and_pvals(lnl, weights, cls=True)
     allowed = ps >= (1 - cl)
 
-    # (n_outcomes,) arrays
     for interpolate in False, True:
         ll, ul = nafi.intervals(ps, hypotheses, cl=cl, interpolate=interpolate)
 
@@ -35,13 +34,16 @@ def test_intervals():
         # NB: this will fail on a problem with empty intervals
         assert np.all((ll > 0) | (allowed[:,0]))
 
-        # Test we get empty intervals (represented by NaNs) if all ps < alpha
         ps_all_bad = np.zeros_like(ps) + (1 - cl)/2
-        ll, ul = nafi.intervals(ps_all_bad, hypotheses, cl=cl, interpolate=interpolate)
+        ps_all_good = np.ones_like(ps) + (1 - cl)
+
+        # Test we get empty intervals (represented by NaNs) if all ps < alpha
+        ll, ul = nafi.intervals(
+            ps_all_bad, hypotheses, cl=cl, interpolate=interpolate)
         assert np.all(np.isnan(ll) & np.isnan(ul))
 
         # Test we get full intervals if all ps >= alpha
-        ps_all_good = np.ones_like(ps) + (1 - cl)
-        ll, ul = nafi.intervals(ps_all_good, hypotheses, cl=cl, interpolate=interpolate)
+        ll, ul = nafi.intervals(
+            ps_all_good, hypotheses, cl=cl, interpolate=interpolate)
         assert np.all(ll == hypotheses[0])
         assert np.all(ul == hypotheses[-1])

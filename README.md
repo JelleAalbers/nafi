@@ -8,7 +8,7 @@ nafi
 Nafi computes (non-asymptotic) frequentist confidence intervals and p-values from likelihoods.
 CLs and simple Bayesian methods are also supported. 
 
-[JAX](https://github.com/google/jax) is used to some accelerate computations. Parts of nafi will be much faster if you have a GPU.
+[JAX](https://github.com/google/jax) is used to accelerate computations, so nafi will be much faster if you have a GPU.
 
 Synopsis
 ============
@@ -40,7 +40,6 @@ lower_limits, upper_limits = nafi.intervals(ps, hypotheses, cl=0.9)
 brazil = nafi.brazil_band(upper_limits, weights)
 
 # Compute results on your real data
-# (We have alternatives that don't need the full weights/ts/ps)
 lnl_obs = counting.single_lnl(n=17, mu_sig=hypotheses, mu_bg=mu_bg)
 t_obs, p_obs = nafi.single_ts_and_pvals(lnl_obs, ts=ts, ps=ps)
 ll_obs, ul_obs = nafi.intervals(p_obs, hypotheses, cl=0.9)

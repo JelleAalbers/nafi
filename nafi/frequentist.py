@@ -198,7 +198,6 @@ def cls_pvals(ts, toy_weight, neyman_ps=None):
     # from -inf to the observed value), unlike "p_{s+b}".
     # Our ps are both survival function values (integrate distribution from
     # observed value to +inf)
-    np.where(ps_0 == 0, )
     return neyman_ps / ps_0
 
 

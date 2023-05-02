@@ -46,18 +46,12 @@ def _lnl_and_weights(mu_sig, mu_bg, n_max):
     # Outcomes are defined completely by the number of events, n
     n = jnp.arange(n_max + 1, dtype=jnp.int32)
     # Probability and log likelihood of observation (given hypothesis)
-    # and log likelihood (given hypothesis)
-    # (n, mu) array
+    # (n, mu) arrays
     lnl = jax.scipy.stats.poisson.logpmf(n[:,None], mu_tot[None,:])
     p = jnp.exp(lnl)
     # Ensure ps are normalized over n
+    # (not guaranteed since we don't sum n to infinity)
     p /= p.sum(axis=0)
-
-    # Log likelihood is now easy. 
-    # Log(0) = -inf, which will work fine, so suppress the division warning
-    #with np.errstate(divide='ignore'):
-    #    lnl = np.log(p)
-
     return lnl, p
 
 
