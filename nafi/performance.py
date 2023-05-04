@@ -1,12 +1,11 @@
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 import nafi
 export, __all__ = nafi.exporter()
 
 
-SIGMAS = np.array([-2, -1, 0, 1, 2])
+SIGMAS = jnp.array([-2, -1, 0, 1, 2])
 
 
 @export

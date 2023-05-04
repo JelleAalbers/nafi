@@ -11,7 +11,7 @@ import nafi
 export, __all__ = nafi.exporter()
 
 DEFAULT_TEST_STATISTIC = 't'
-DEFAULT_INTERPOLATE_BESTFIT = False
+DEFAULT_INTERPOLATE_BESTFIT = True
 DEFAULT_CLS = False
 
 
@@ -58,8 +58,8 @@ def maximum_likelihood(lnl, interpolate=True):
     # people will throw at this...
     y = jnp.where(
         (
-            (i > 0) & (i < n_hyp)
-            & (i_itp < i + 1)
+            (i > 0) & (i < n_hyp - 1)
+            & (jnp.abs(i_itp - i) <= 1)
             & (y_itp > y)
         ),
         y_itp,
