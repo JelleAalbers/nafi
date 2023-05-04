@@ -12,7 +12,7 @@ def _logit(p):
 
 @export
 @partial(jax.jit, static_argnames=('n_x', 'x_transform'))
-def get_lnl(mu_hyp, n_x=1000, x_transform=_logit):
+def lnl_and_weights(mu_hyp, n_x=1000, x_transform=_logit):
     """Return (logl, toy weight) for a Gaussian measurement
     of a parameter mu constrained to >= 0.
 

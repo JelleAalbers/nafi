@@ -37,7 +37,7 @@ def lnl_and_weights(
     The model is a sum of two Gaussians, one for signal and one for background,
     separated by sigma_sep. The signal rate is a hypothesis parameter.
     """
-    # Set n to highest number that can reasonably occur
+    # If not specified, set ns to highest number that can reasonably occur
     if n_sig_max is None:
         n_sig_max = nafi.large_n_for_mu(np.max(mu_sig_hyp))
     if n_bg_max is None:
@@ -70,6 +70,8 @@ def _lnl_and_weights(
     n_nsig = n_sig_max + 1
     n_sig_range = jnp.arange(n_nsig)
 
+    # Order is significant here, will be passed as positional arguments
+    # (needed for jax vmap: https://github.com/google/jax/issues/7465)
     common_kwargs = dict(
         n_trials=trials_per_n,
         mu_sig_hyp=mu_sig_hyp,
@@ -90,14 +92,11 @@ def _lnl_and_weights(
     # Get lnls for different signal event counts
     # (n_sig, n_trials, n_hyp)
     lnl_sig = jnp.zeros((n_sig_max, trials_per_n, len(mu_sig_hyp)))
-    # + 1 since key also counts
+    # Map _drs_one_source over n_sig and RNG keys, nothing else
     drs_alln = jax.vmap(
         _drs_one_source, 
-        # Map over n_sig and RNG keys, nothing else
         in_axes=(0,0,None,None,None,None,None,None,None))
     key, subkey = jax.random.split(key)
-    # At least in my jax version, vmap does not work well with keyword arguments
-    # yet: https://github.com/google/jax/issues/7465
     lnl_sig = (
         lnl_bg[None,:,:] 
         - mu_sig_hyp[None,:]
@@ -156,6 +155,8 @@ def _drs_one_source(
         present = t < mu
     else:
         # Keep a fixed number of events
+        # We still generated n_max events above so mu doesn't have to be
+        # a static argument (and mus won't trigger recompilation)
         present = (jnp.arange(n_max) < mu)[None, :]
     
     # Differential rate (n_trials, n_max, n_hyp)

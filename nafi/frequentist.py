@@ -33,9 +33,9 @@ def maximum_likelihood(lnl, interpolate=True):
     Returns two (|trials|, |n_sig|) arrays: the bestfit likelihood ratio and
     index of best-fit hypothesis.
 
-    If interpolate, bestfit likelihood is interpolated parabolically
+    If interpolat=True, bestfit likelihood is interpolated parabolically
         when it is not at the edge of the likelihood curve.
-        The index remains an integer, and is unchanged.
+        The index will be a float in this case.
     """
     n_outcomes, n_hyp = lnl.shape
     i = jnp.argmax(lnl, axis=-1)
@@ -56,15 +56,12 @@ def maximum_likelihood(lnl, interpolate=True):
     # The last two shouldn't really be necessary if the interpolation is
     # working correctly, but I don't know what kinds of mad likelihoods
     # people will throw at this...
-    y = jnp.where(
-        (
-            (i > 0) & (i < n_hyp - 1)
-            & (jnp.abs(i_itp - i) <= 1)
-            & (y_itp > y)
-        ),
-        y_itp,
-        y
-    )
+    allow_itp = (
+        (i > 0) & (i < n_hyp - 1)
+        & (jnp.abs(i_itp - i) <= 1)
+        & (y_itp > y))
+    y = jnp.where(allow_itp, y_itp, y)
+    i = jnp.where(allow_itp, i_itp, i)
     return y, i
 
 

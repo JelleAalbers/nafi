@@ -56,16 +56,6 @@ def intervals(
 
     # Interpolate / fine-tune limits
     if interpolate:
-
-        def _itp(alpha, ps, hypotheses, i):
-            """Return interpolated hypothesis[i] where ps[:,i] == alpha"""
-            i = jnp.clip(i, 0, len(hypotheses) - 1)
-            return jax.vmap(jnp.interp, in_axes=(None, 0, 0))(
-                alpha,                        # x
-                jax.vmap(jnp.take)(ps, i),    # xp
-                hypotheses[i],                # fp
-            )
-
         # i = indices of size-2 slice of values to interpolate.
         # Note the [::-1]: ps is decreasing in hypothesis,
         # (at ul_i, next hypothesis is not allowed by construction)
@@ -94,3 +84,13 @@ def intervals(
         ll = ll[0]
 
     return ll, ul
+
+
+def _itp(alpha, ps, hypotheses, i):
+    """Return interpolated hypothesis[i] where ps[:,i] == alpha"""
+    i = jnp.clip(i, 0, len(hypotheses) - 1)
+    return jax.vmap(jnp.interp, in_axes=(None, 0, 0))(
+        alpha,                        # x
+        jax.vmap(jnp.take)(ps, i),    # xp
+        hypotheses[i],                # fp
+    )
