@@ -19,7 +19,7 @@ export, __all__ = nafi.exporter()
 
 
 @export
-def lnl_and_weights(mu_sig, mu_bg, n_max=None):
+def lnl_and_weights(mu_sig, mu_bg, n_max=None, return_outcomes=False):
     """Return (logl, toy weight) for a counting experiment with background.
 
     Both are (n_outcomes, hypotheses) arrays:
@@ -36,11 +36,11 @@ def lnl_and_weights(mu_sig, mu_bg, n_max=None):
         # Can't do dynamic shapes inside jitted jax functions, so we have to
         # fix a max n in this ugly wrapper function
         n_max = nafi.large_n_for_mu(mu_bg + np.max(mu_sig))
-    return _lnl_and_weights(mu_sig, mu_bg, n_max)
+    return _lnl_and_weights(mu_sig, mu_bg, n_max, return_outcomes)
 
 
-@partial(jax.jit, static_argnames='n_max')
-def _lnl_and_weights(mu_sig, mu_bg, n_max):
+@partial(jax.jit, static_argnames=('n_max', 'return_outcomes'))
+def _lnl_and_weights(mu_sig, mu_bg, n_max, return_outcomes=False):
     # Total expected events
     mu_tot = mu_sig + mu_bg
     # Outcomes are defined completely by the number of events, n
@@ -52,6 +52,8 @@ def _lnl_and_weights(mu_sig, mu_bg, n_max):
     # Ensure ps are normalized over n
     # (not guaranteed since we don't sum n to infinity)
     p /= p.sum(axis=0)
+    if return_outcomes:
+        return lnl, p, n
     return lnl, p
 
 

@@ -11,8 +11,8 @@ def _logit(p):
 
 
 @export
-@partial(jax.jit, static_argnames=('n_x', 'x_transform'))
-def lnl_and_weights(mu_hyp, n_x=1000, x_transform=_logit):
+@partial(jax.jit, static_argnames=('n_x', 'x_transform', 'return_outcomes'))
+def lnl_and_weights(mu_hyp, n_x=1000, x_transform=_logit, return_outcomes=False):
     """Return (logl, toy weight) for a Gaussian measurement
     of a parameter mu constrained to >= 0.
 
@@ -44,4 +44,6 @@ def lnl_and_weights(mu_hyp, n_x=1000, x_transform=_logit):
     p_x = jnp.exp(lnl) * dx
     toy_weight = p_x / p_x.sum(axis=0)
 
+    if return_outcomes:
+        return lnl, toy_weight, x
     return lnl, toy_weight
