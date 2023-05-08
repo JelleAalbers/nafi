@@ -11,7 +11,7 @@ import nafi
 export, __all__ = nafi.exporter()
 
 DEFAULT_TEST_STATISTIC = 't'
-DEFAULT_INTERPOLATE_BESTFIT = True
+DEFAULT_INTERPOLATE_BESTFIT = False
 DEFAULT_CLS = False
 
 
@@ -33,7 +33,7 @@ def maximum_likelihood(lnl, interpolate=True):
     Returns two (|trials|, |n_sig|) arrays: the bestfit likelihood ratio and
     index of best-fit hypothesis.
 
-    If interpolat=True, bestfit likelihood is interpolated parabolically
+    If interpolate=True, bestfit likelihood is interpolated parabolically
         when it is not at the edge of the likelihood curve.
         The index will be a float in this case.
     """
