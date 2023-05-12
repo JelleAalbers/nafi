@@ -16,7 +16,8 @@ def conditional_bestfit_bg(n, m, mu_hyp, tau=1):
         m: Number of observed events in the ancillary experiment
         mu_hyp: Array with signal rate hypotheses
         tau: Ratio of background rates in the two experiments
-    From Rolke, Lopez, Conrad (2005), arxiv:0403059
+
+    See e.g. Rolke, Lopez, Conrad (2005), arxiv:0403059
     """
     _q = n + m - (1+tau) * mu_hyp
     root1 = (

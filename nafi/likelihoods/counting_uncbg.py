@@ -1,6 +1,5 @@
-import numpy as np
-from scipy import stats
-from scipy.special import xlogy
+import jax
+import jax.numpy as jnp
 
 import nafi
 export, __all__ = nafi.exporter()
@@ -14,14 +13,15 @@ def conditional_bestfit_bg(n, mu_sig, mu_bg_estimate, sigma_bg):
     b = 0.5 * (
         be - mu - sigma**2 
         + ( (be+mu)**2 - 2 * (be - 2 * n + mu) * sigma**2 + sigma**4 )**0.5)
-    b = np.where(np.isfinite(b) & (b >= 0), b, 0)
+    b = jnp.where(jnp.isfinite(b) & (b >= 0), b, 0)
     return b
 
 
 @export
-def get_lnl(mu_sig_hyp, mu_bg_true, mu_bg_estimate, sigma_bg):
+def lnl_and_weights(mu_sig_hyp, mu_bg_true, mu_bg_model, sigma_bg, n_max=None):
     """Return (logl, toy weight) for a counting experiment with a background
-        that has a Gaussian absolute theoretical unceratainty sigma_bg.
+        that has a Gaussian absolute theoretical uncertainty on mu_bg of
+        sigma_bg.
 
     Both are (n_outcomes, hypotheses) arrays:
         lnl contains the log likelihood at each hypothesis,
@@ -29,18 +29,25 @@ def get_lnl(mu_sig_hyp, mu_bg_true, mu_bg_estimate, sigma_bg):
 
     Arguments:
         mu_sig_hyp: Array with signal rate hypotheses
-        mu_bg_true: True background rate, array of same shape as mu_sig_hyp 
-        mu_bg_estimate: Estimated background rate, scalar
-        sigma_bg: Gaussian absolute uncertainty on background
+        mu_bg_true: True background rate to assume for toy data,
+            array of same shape as mu_sig_hyp.
+        mu_bg_model: Expected/modelled mu_bg, scalar
+        sigma_bg: Gaussian absolute uncertainty on mu_bg_model
+            (i.e. in number of events, not a percentage)
     """
-    # Total expected events
-    mu_tot = mu_sig_hyp + mu_bg_true
-    # Outcomes defined by n
-    n = np.arange(stats.poisson(mu_tot.max()).ppf(0.999)).astype(int)
-    # Probability of observation (given hypothesis)
-    # (n, mu) array
-    p = stats.poisson(mu_tot[None,:]).pmf(n[:,None])
+    if n_max is None:
+        n_max = nafi.large_n_for_mu(mu_bg_true.max() + mu_sig_hyp.max())
+    return _lnl_and_weights(mu_sig_hyp, mu_bg_true, mu_bg_model, sigma_bg, n_max)
 
+@export
+def _lnl_and_weights(mu_sig_hyp, mu_bg_true, mu_bg_estimate, sigma_bg, n_max):
+    # Total expected events
+    mu_tot_true = mu_sig_hyp + mu_bg_true
+    # Outcomes defined by n
+    n = jnp.arange(n_max)
+    # Probability of observation (given hypothesis and mu_bg_true)
+    # (n, mu) array
+    p = jax.scipy.stats.poisson.pmf(n[:,None], mu_tot_true[None,:])
     # Ensure ps are normalized over n
     p /= p.sum(axis=0)
 
@@ -51,9 +58,12 @@ def get_lnl(mu_sig_hyp, mu_bg_true, mu_bg_estimate, sigma_bg):
         mu_bg_estimate, sigma_bg)
 
     # Log likelihood
+    # lnl = (
+    #     jax.scipy.stats.poisson.logpmf(n[:,None], mu_sig_hyp[None,:] + b)
+    #     - (b - mu_bg_estimate)**2 / (2 * sigma_bg**2))
     lnl = (
         -(mu_sig_hyp[None,:] + b) 
-        + xlogy(n[:,None], mu_sig_hyp[None,:] + b) 
+        + jax.scipy.special.xlogy(n[:,None], mu_sig_hyp[None,:] + b) 
         - (b - mu_bg_estimate)**2 / (2 * sigma_bg**2))
 
-    return lnl, p, b
+    return lnl, p

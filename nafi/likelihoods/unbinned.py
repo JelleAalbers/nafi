@@ -20,7 +20,6 @@ import nafi
 export, __all__ = nafi.exporter()
 
 
-
 @export
 class UnbinnedSignalBackground:
     """Simulation and (extended) unbinned log likelihood for
@@ -212,6 +211,7 @@ class UnbinnedSignalBackground:
         raise NotImplementedError
     
 
+@export
 class TwoGaussians(UnbinnedSignalBackground):
     """Simulation and (extended) unbinned log likelihood for
         two Poisson processes with a single observable per event:
