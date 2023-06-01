@@ -45,11 +45,28 @@ class UnbinnedSignalBackground:
             n_sig_max=None,
             n_bg_max=None,
             trials_per_n=10_000,
+            return_outcomes=False,
             **params):
-        """Return (lnl, toy_weight), both (n_trials, n_hypotheses) arrays
-            lnl contains the log likelihood at each hypothesis,
-            toy_weight is an (n_trials, hypotheses) containing (hypothesis-dependent)
-            weighting factors for each toy.
+        """Return (logl, toy weight) for an unbinned signal/background likelihood
+        
+        Both are (n_outcomes, hypotheses) arrays:
+                lnl contains the log likelihood at each hypothesis,
+                toy_weight contains P(outcome | hypotheses), normalized over outcomes
+        
+        Arguments:
+            mu_sig_hyp: Array with expected signal event hypotheses
+            mu_bg: EXpected background events (scalar)
+            key: Jax PNRG key to use. If not provided, will choose a random one
+                according to the numpy global random state.
+            n_sig_max: Largest number of signal events to consider. 
+                If None, will be determined automatically from mu_sig.
+            n_bg_max: Largest number of background events to consider.
+                If None, will be determined automatically from mu_bg.
+            trials_per_n: Number of MC trials to use per signal event count.
+            return_outcomes: If True, return a third array of shape (n_outcomes,)
+                containing a summary statistic of the outcome for each toy.
+                The default (set by the summary_stat method) is the total number
+                of observed events.
         """
         self.check_params(params)
         # If not specified, set ns to highest number that can reasonably occur
@@ -62,7 +79,7 @@ class UnbinnedSignalBackground:
             # Probably jax devs would not recommend this
             seed = np.random.randint(2**32)
             key = jax.random.PRNGKey(seed=seed)
-        return self._lnl_and_weights(
+        lnl, weights, summary = self._lnl_and_weights(
             mu_sig_hyp=mu_sig_hyp, 
             mu_bg=mu_bg, 
             key=key, 
@@ -70,6 +87,9 @@ class UnbinnedSignalBackground:
             n_bg_max=n_bg_max, 
             trials_per_n=trials_per_n,
             params=params)
+        if return_outcomes:
+            return lnl, weights, summary
+        return lnl, weights
 
 
     @partial(jax.jit, 
@@ -94,20 +114,21 @@ class UnbinnedSignalBackground:
             params=params)
 
         # Get lnls for background events
-        # (n_trials, n_hyp)
+        # drs_bg is (n_trials, n_hyp), summary_bg is (n_trials,)
         key, subkey = jax.random.split(key)
-        lnl_bg = -mu_bg + self._drs_one_source(
+        drs_bg, summary_bg = self._drs_one_source(
             mu=mu_bg, 
             key=subkey,
             n_max=n_bg_max,
             simulate=self.simulate_background,
             poisson=True,
             **common_kwargs)
+        lnl_bg = -mu_bg + drs_bg
 
         # Get lnls for different signal event counts
-        # (n_sig, n_trials, n_hyp)
-        lnl_sig = jnp.zeros((n_sig_max, trials_per_n, len(mu_sig_hyp)))
         # Map _drs_one_source over n_sig and RNG keys, nothing else
+        # TODO: Probably have to make this vmap more intelligent now that two 
+        # values are returned
         key, subkey = jax.random.split(key)
         drs_alln = jax.vmap(
             partial(
@@ -115,14 +136,16 @@ class UnbinnedSignalBackground:
                 n_max=n_sig_max,
                 simulate=self.simulate_signal,
                 poisson=False,
-                **common_kwargs))
-        lnl_sig = (
-            lnl_bg[None,:,:] 
-            - mu_sig_hyp[None,:]
-            + drs_alln(
-                n_sig_range,                               # mu
-                jax.random.split(subkey, num=n_nsig))      # key
+                **common_kwargs),
+            out_axes=(0, 0))
+        # drs_sig is (n_sig, n_trials, n_hyp), same as lnl
+        # summary_sig is (n_sig, n_trials)
+        drs_sig, summary_sig = drs_alln(
+            n_sig_range,                               # mu
+            jax.random.split(subkey, num=n_nsig)       # key
         )
+        lnl = lnl_bg[None,:,:] - mu_sig_hyp[None,:] + drs_sig
+        summary = summary_bg[None,:] + summary_sig
 
         # P(n_sig|mu_sig), (n_sig, n_mu)
         # The range of n may be insufficient for all mu, so normalize explicitly
@@ -135,9 +158,10 @@ class UnbinnedSignalBackground:
 
         # Squash the (n_sig, n_trials) dimensions into one
         toy_weight = toy_weight.reshape(-1, n_hyp)
-        lnl_sig = lnl_sig.reshape(-1, n_hyp)
+        lnl = lnl.reshape(-1, n_hyp)
+        summary = summary.reshape(-1)
 
-        return lnl_sig, toy_weight
+        return lnl, toy_weight, summary
 
 
     def _drs_one_source(
@@ -167,16 +191,20 @@ class UnbinnedSignalBackground:
             present = t < mu
         else:
             # Keep a fixed number of events
-            # We still generated n_max events above so mu doesn't have to be
-            # a static argument (and mus won't trigger recompilation)
+            # We still generated n_max events above since 
+            # jax won't let us  specialize shapes based on argument values
             present = (jnp.arange(n_max) < mu)[None, :]
         
-        # Differential rate (n_trials, n_max, n_hyp)
+        # Differential rate (n_trials, n_max+1, n_hyp)
         dr = self.differential_rate(
             x[...,None], mu_sig_hyp[None,None,:], mu_bg, params)
         
-        # Return second term in log likelihood (n_trials, n_hyp)
-        return jnp.sum(jax.scipy.special.xlogy(present[...,None], dr), axis=1)
+        # Second term in log likelihood (n_trials, n_hyp)
+        logdr_sum = jnp.sum(jax.scipy.special.xlogy(present[...,None], dr), axis=1)
+
+        # Summary statistic (n_trials,)
+        summary = self.summary(x, present, params)
+        return logdr_sum, summary
     
     def single_lnl(self, x, mu_sig, mu_bg, **params):
         """Return log likelihood for a single observation
@@ -201,6 +229,18 @@ class UnbinnedSignalBackground:
         return -(mu_sig + mu_bg) + jnp.sum(jnp.log(dr), axis=0)
 
     # Functions to override in child classes
+
+    def summary(self, x, present, params):
+        """Return a summary statistic of the data.
+
+        The number must be additive over events. This function is called
+        once for signal events and once for background events, then the results
+        are added.
+        
+        By default, returns the total number of events.
+        """
+        # x and present are both (n_trials, n_ns) arrays
+        return jnp.sum(present, axis=1)
 
     def simulate_signal(self, n_trials, n_max, key, params):
         """Simulate (n_trials, n_max) signal events"""

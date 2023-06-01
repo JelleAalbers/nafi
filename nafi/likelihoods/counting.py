@@ -31,6 +31,8 @@ def lnl_and_weights(mu_sig, mu_bg, n_max=None, return_outcomes=False):
         mu_bg: Background rate (scalar)
         n_max: Largest number of events to consider. If None, will be
             determined automatically from mu_sig and mu_bg.
+        return_outcomes: If True, return a third array of shape (n_outcomes,) 
+            containing the number of events for each outcome.
     """
     if n_max is None:
         # Can't do dynamic shapes inside jitted jax functions, so we have to

@@ -27,7 +27,6 @@ def bayesian_pvals(lnl, interval_type='hdpi', prior=None, hypothesis_spacing=Non
     # ln_evidence = logsumexp(lnl_sig, axis=-1)
     ln_posterior = lnl + ln_prior[None,:] #  - ln_evidence[...,None]
     posterior = np.exp(ln_posterior - logsumexp(ln_posterior, axis=-1)[...,None])
-    np.testing.assert_allclose(np.sum(posterior, axis=-1), 1)
 
     if interval_type == 'hdpi':
         # Get the highest density interval
