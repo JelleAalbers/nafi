@@ -80,6 +80,7 @@ def test_statistic(
             * q is t, but zero if hypothesis <= bestfit (data is an excess), 
             * q0 is L(bestfit)/L(0)
             * lep is L(hypothesis)/L(0)
+            * signedt is t, but -t if hypothesis < bestfit (data is an excess)
         interpolate_bestfit: If True, use interpolation to estimate 
             the best-fit hypothesis more precisely.
 
@@ -91,11 +92,14 @@ def test_statistic(
     lnl_best, best_i = maximum_likelihood(lnl, interpolate=interpolate_bestfit)
 
     # Compute statistics (|n_trials|,|n_hyps|)
-    if statistic in ('t', 'q'):
+    if statistic in ('t', 'q', 'signedt'):
         ts = -2 * (lnl - lnl_best[...,None])
-        if statistic == 'q':
-            # Zero excesses, i.e. hypothesis <= bestfit
-            ts *= best_i[...,None] <= jnp.arange(n_hyp)[None,:]
+        if statistic in ('q', 'signedt'):
+            is_excess = jnp.arange(n_hyp)[None,:] <= best_i[...,None]
+            if statistic == 'q':
+                ts = jnp.where(is_excess, 0, ts)
+            else:
+                ts = jnp.where(is_excess, -ts, ts)
     elif statistic == 'q0':
         # L(best)/L(0). Note this does not depend on the hypothesis.
         # Assuming hypothesis 0 is background only!
@@ -110,7 +114,7 @@ def test_statistic(
 
 
 @export
-@jax.jit
+@partial(jax.jit, static_argnames=('statistic', 'cls'))
 def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
     """Compute asymptotic frequentist p-value for test statistics ts
     
@@ -131,7 +135,7 @@ def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
     # q's distribution has a delta function at 0, but since 0 is the lowest
     # possible value, it never contributes to the survival function.
     # The special function scipy uses here is quite expensive.
-    ps = jax.scipy.stats.chi2.sf(ts, df=1)
+    ps = 1 - jax.scipy.stats.chi2.cdf(ts, df=1)
     if statistic == 'q':
         ps *= 0.5
     return ps

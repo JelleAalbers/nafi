@@ -39,6 +39,7 @@ def lnl_and_weights(mu_sig_hyp, mu_bg_true, mu_bg_model, sigma_bg, n_max=None):
         n_max = nafi.large_n_for_mu(mu_bg_true.max() + mu_sig_hyp.max())
     return _lnl_and_weights(mu_sig_hyp, mu_bg_true, mu_bg_model, sigma_bg, n_max)
 
+
 @export
 def _lnl_and_weights(mu_sig_hyp, mu_bg_true, mu_bg_estimate, sigma_bg, n_max):
     # Total expected events

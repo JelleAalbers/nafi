@@ -100,3 +100,23 @@ def _brazil_band(limits, toy_weight, sigmas):
             quantiles,
         )
     return sensi
+
+
+@export
+@jax.jit
+def credibility(posterior_cdf, hypotheses, ll, ul):
+    """Return Bayesian probability content of intervals [ll, ul] 
+    given a posterior CDF.
+
+    Arguments:
+     - posterior_cdf: posterior CDF, shape (n_outcomes, n_hypotheses,)
+     - hypotheses: hypotheses, shape (n_hypotheses,)
+     - ll: lower limits, shape (n_outcomes,). If omitted, uses hypotheses[0].
+     - ul: upper limits, shape (n_outcomes,). If omitted, uses hypotheses[-1].
+    """
+    hyp_to_p = jax.vmap(jnp.interp, in_axes=(0, None, 0))
+    return (
+        # Credibility of [-inf, ul]
+        hyp_to_p(ul, hypotheses, posterior_cdf)
+        # Credibility of [-inf, ll]
+        - hyp_to_p(ll, hypotheses, posterior_cdf))
