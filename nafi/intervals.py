@@ -57,18 +57,17 @@ def intervals(
     # Interpolate / fine-tune limits
     if interpolate:
         # i = indices of size-2 slice of values to interpolate.
-        # Note the [::-1]: ps is decreasing in hypothesis,
+        # Note we use [1,0] instead of [0,1]: the ps are decreasing w hypotheses,
         # (at ul_i, next hypothesis is not allowed by construction)
         # but jnp.interp expects increasing x.
-        # TODO: ... but my unit tests still pass without the [::-1]...
-        i = ul_i[:,None] + jnp.arange(2)[::-1][None,:]
+        i = ul_i[:,None] + jnp.array([1,0])[None,:]
         ul = jnp.where(
             ul_i == len(hypotheses) - 1,
             ul,
             _itp(alpha, ps, hypotheses, i))
 
         # Same for lower limit
-        i = ll_i[:,None] + jnp.arange(-1, 1)[None,:]
+        i = ll_i[:,None] + jnp.array([-1,0,1])[None,:]
         i = jnp.clip(i, 0, len(hypotheses) - 1)
         ll = jnp.where(
             ll_i == 0,
