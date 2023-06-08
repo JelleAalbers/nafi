@@ -22,7 +22,7 @@ def intervals(
         cl (float): confidence level
 
     Returns:
-        (ul, ll), each arrays with shape of ps without the last axis.
+        (ul, ll), two (n_trials,) arrays with upper and lower limits
     """
     single_trial = len(ps.shape) == 1
     if single_trial:
@@ -90,7 +90,7 @@ def _itp(alpha, ps, hypotheses, i):
     """Return interpolated hypothesis[i] where ps[:,i] == alpha"""
     i = jnp.clip(i, 0, len(hypotheses) - 1)
     return jax.vmap(jnp.interp, in_axes=(None, 0, 0))(
-        alpha,                        # x
-        jax.vmap(jnp.take)(ps, i),    # xp
-        hypotheses[i],                # fp
+        alpha,                      # x
+        jax.vmap(jnp.take)(ps, i),  # xp
+        hypotheses[i]               # fp
     )

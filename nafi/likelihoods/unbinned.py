@@ -127,8 +127,6 @@ class UnbinnedSignalBackground:
 
         # Get lnls for different signal event counts
         # Map _drs_one_source over n_sig and RNG keys, nothing else
-        # TODO: Probably have to make this vmap more intelligent now that two 
-        # values are returned
         key, subkey = jax.random.split(key)
         drs_alln = jax.vmap(
             partial(
@@ -141,8 +139,8 @@ class UnbinnedSignalBackground:
         # drs_sig is (n_sig, n_trials, n_hyp), same as lnl
         # summary_sig is (n_sig, n_trials)
         drs_sig, summary_sig = drs_alln(
-            n_sig_range,                               # mu
-            jax.random.split(subkey, num=n_nsig)       # key
+            mu=n_sig_range,
+            key=jax.random.split(subkey, num=n_nsig)
         )
         lnl = lnl_bg[None,:,:] - mu_sig_hyp[None,:] + drs_sig
         summary = summary_bg[None,:] + summary_sig

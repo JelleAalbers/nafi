@@ -108,15 +108,31 @@ def credibility(posterior_cdf, hypotheses, ll, ul):
     """Return Bayesian probability content of intervals [ll, ul] 
     given a posterior CDF.
 
+    As in posterior_cdf, the hypotheses are assumed to be merely discrete
+    representatives from an underlying continuous parameter that is of interest.
+
     Arguments:
-     - posterior_cdf: posterior CDF, shape (n_outcomes, n_hypotheses,)
+     - posterior_cdf: posterior, shape (n_outcomes, n_hypotheses,)
+        See nafi.posterior_cdf, don't just cumsum your posterior if you care 
+        about off-by-half errors.
      - hypotheses: hypotheses, shape (n_hypotheses,)
      - ll: lower limits, shape (n_outcomes,). If omitted, uses hypotheses[0].
      - ul: upper limits, shape (n_outcomes,). If omitted, uses hypotheses[-1].
     """
+    # P(truth <= h) = P(truth < h), see posterior_cdf
     hyp_to_p = jax.vmap(jnp.interp, in_axes=(0, None, 0))
-    return (
-        # Credibility of [-inf, ul]
+    cred = (
         hyp_to_p(ul, hypotheses, posterior_cdf)
-        # Credibility of [-inf, ll]
-        - hyp_to_p(ll, hypotheses, posterior_cdf))
+        - hyp_to_p(ll, hypotheses, posterior_cdf)
+        # ... no need to add P(truth = ll), parameter is continuous so 
+        # that is zero
+    )
+    return cred
+
+
+    #     # So far so good. Now the surprise: we also need to subtract
+    #     # the posterior at ul!
+    #     # The posterior at x is the probability content of x +- dx/2, 
+    #     # so the posterior_cdf at x spuriously includes some probability.
+    #     # - hyp_to_p(ul, hypotheses, posterior)
+    # )

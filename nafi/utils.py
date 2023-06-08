@@ -1,8 +1,6 @@
-from functools import partial
-import warnings
-
 import jax
 import jax.numpy as jnp
+from scipy import stats
 from tqdm import tqdm
 
 
@@ -79,3 +77,16 @@ def tqdm_maybe(progress=False):
 @export
 def large_n_for_mu(mu):
     return int(mu + 5 * mu**0.5 + 5)
+
+
+@export
+def poisson_ul(n, cl=0.9):    
+    """Return upper limit for a Poisson process with n observed events.
+
+    Arguments:
+     - n: number of observed events
+     - cl: confidence level
+    """
+    # Analytical solution for classical Poisson upper limit
+    # (not the same as upper endpoint of FC interval)
+    return stats.chi2.ppf(cl, 2 * n + 2) / 2
