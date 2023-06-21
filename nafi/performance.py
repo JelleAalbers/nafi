@@ -41,6 +41,8 @@ def outcome_probabilities(ll, ul, toy_weight, hypotheses):
     ul_allows_mu = hypotheses[None,:] <= ul[:,None]
     p_excl_bg = 1 - jnp.average(
         ll_allows_mu & ul_allows_mu, weights=toy_weight[:,0], axis=0)
+    # Compute P(mu excluded by UL | 0 is true)
+    # The inverse of this maps quantiles to the "Brazil band"
     p_excl_bg_ul = 1 - jnp.average(
         ul_allows_mu, weights=toy_weight[:,0], axis=0)
 
@@ -128,11 +130,3 @@ def credibility(posterior_cdf, hypotheses, ll, ul):
         # that is zero
     )
     return cred
-
-
-    #     # So far so good. Now the surprise: we also need to subtract
-    #     # the posterior at ul!
-    #     # The posterior at x is the probability content of x +- dx/2, 
-    #     # so the posterior_cdf at x spuriously includes some probability.
-    #     # - hyp_to_p(ul, hypotheses, posterior)
-    # )
