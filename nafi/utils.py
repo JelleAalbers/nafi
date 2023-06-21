@@ -1,3 +1,5 @@
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 from scipy import stats
@@ -51,21 +53,31 @@ def weighted_quantile_sorted(values, weights, quantiles):
     return values[idx]
 
 
+
 @export
 @jax.jit
 def weighted_ps(x, w):
+    return _weighted_ps_presorted(*_order_and_index(x), w)
+
+
+@jax.jit
+def _order_and_index(x):
     # indices that would sort x
     order = jnp.argsort(x)
-    
-    # P of getting a x lower in the sort order
-    w_ordered = w[order]
-    p_ordered = jnp.cumsum(w_ordered) - w_ordered
-    
+
     # Indices where you would place each x in sorted array
     # If all t are distinct, this is equal to the rank order
     # = jnp.argsort(order) ?
     sort_index = jnp.searchsorted(x[order], x)#.clip(0, len(x))
-    
+
+    return order, sort_index
+
+
+@jax.jit
+def _weighted_ps_presorted(order, sort_index, w):
+    w = w[order]
+    # P of getting a x lower in the sort order
+    p_ordered = jnp.cumsum(w) - w
     return p_ordered[sort_index]
 
 

@@ -1,99 +1,115 @@
-from functools import partial
+"""The on-off / two-bin counting experiment.
+
+n events are observed in the main experiment, m in the ancilla.
+
+The main experiment has signal mu_sig and background mu_bg.
+
+The ancilla only has background mu_bg * tau
+"""
 import jax
 from jax import numpy as jnp
-import numpy as np
-
-xlogy = jax.scipy.special.xlogy
-poisson_pmf = jax.scipy.stats.poisson.pmf
-
-import nafi
 
 
-def lnl_and_weights(
-        mu_sig, mu_bg, tau=1, 
-        n_max=None, m_max=None,
-          return_outcomes=False):
-    """Return (logl, toy weight) for a counting experiment with 
-        unknown background. The background is constrained by another 
-        counting experiment, which measures tau times the same background.
-
-    Both results are (n_outcomes, hypotheses) arrays:
-        lnl contains the log likelihood at each hypothesis,
-        toy_weight contains P(outcome | hypotheses), normalized over outcomes
+# Can't jit this guy, it produces arrays whose shape depend on the args
+def outcomes(n_max, m_max, ravel=True):
+    """Return 2-tuple of two ((n_max + 1) * (m_max + 1)) arrays with possible
+    experimental outcomes.
 
     Arguments:
-        mu_sig_hyp: Array with signal rate hypotheses
-        mu_bg: True background for toys, array of same shape as mu_sig_hyp
-            (will not be constant when using the profile construction.)
-        tau: Ratio of background rates in the two experiments.
-            If tau > 1, the ancillary experiment is more constraining
-            for the background than the signal.
-        return_outcomes: if true, return a third array
-            (2, n_outcomes) with the (n, m) values of each outcome.
+        - n_max: Maximum number of events in main experiment to consider
+        - m_max: Maximum number of events in ancillary experiment to consider
+        - ravel: If False (default is true), instead return two 
+            (n_max + 1, m_max + 1) 2d arrays.
     """
-    if n_max is None:
-        n_max = nafi.large_n_for_mu(np.max(mu_sig + mu_bg))
-    if m_max is None:
-        m_max = nafi.large_n_for_mu(tau * np.max(mu_bg))
-    return _lnl_and_weights(mu_sig, mu_bg, tau, n_max, m_max, return_outcomes)
-
-
-@partial(jax.jit, static_argnames=('n_max', 'm_max', 'return_outcomes'))
-def _lnl_and_weights(mu_sig_hyp, mu_bg_true, tau, n_max, m_max, return_outcomes):
-
-    # Total expected events
-
     # Outcomes defined by n (obs in main) and m (obs in anc)
     n = jnp.arange(n_max + 1)
     m = jnp.arange(m_max + 1)
     # (n, m) grids with n and m values
     n, m = jnp.meshgrid(n, m, indexing='ij')
-    # reshape to (n, m, 1), third axis will represent hypotheses
-    n, m = n[...,None], m[...,None]
+    if ravel:
+        # Ravel into flat (n * m) arrays
+        n, m = n.ravel(), m.ravel()
+    return n, m
 
-    # Conditional best-fit background rate
-    # (n, m, n_hyp)
+
+@jax.jit
+def profile_lnl(mu_sig_hyp, n, m, *, tau):
+    """Return (n_outcomes, n_hyp) profile log likelihood
+    """
+    # Get best-fit background (n_outcomes, n_hyp)
     b_doublehat = conditional_bestfit_bg(
-        n, m, mu_sig_hyp[None,None,:], tau=tau)
+        mu_sig_hyp[None,:], n[:,None], m[:,None], tau=tau)
     
-    # Total expected events
-    # (n, m, n_hyp)
-    mu = mu_sig_hyp[None,None,:] + b_doublehat
-    mu_anc = tau * b_doublehat
-    
-    # log likelihood (omitting unnecessary factorial term)
-    lnl = (
-        -mu + xlogy(n, mu)
-        -mu_anc + xlogy(m, mu_anc)
+    return _lnl(mu_sig_hyp[None,:], b_doublehat, n[:,None], m[:,None], tau=tau)
+
+
+@jax.jit
+def _lnl(mu_sig_hyp, mu_bg, n, m, *, tau):
+    """Return (n_outcomes, n_hyp) log likelihood,
+    without unnecessary factorial term.
+
+    All arguments must be broadcastable
+    """
+    mu_main = mu_sig_hyp + mu_bg
+    mu_anc = tau * mu_bg
+    return (
+        -mu_main + jax.scipy.special.xlogy(n, mu_main)
+        -mu_anc + jax.scipy.special.xlogy(m, mu_anc)
     )
 
-    # p(outcome | hypothesis, true mu_bg)
-    # (equivalent to running an MC with many toys,
-    #  setting true nuisances to mu_bg_true)
-    p_outcome = (
-        poisson_pmf(n, mu_sig_hyp[None,None,:] + mu_bg_true[None,None,:])
-        * poisson_pmf(m, tau * mu_bg_true[None,None,:]))
 
-    # Note lnl != np.log(p_outcome), since mu_bg is different in the two cases
-    # (p_outcome uses mu_bg_true, lnl uses b_doublehat)
+@jax.jit
+def profile_weights(mu_sig_hyp, n, m, n_obs, m_obs, *, tau):
+    # Get best-fit background, (hypotheses,) array
+    b_doublehat = conditional_bestfit_bg(
+        mu_sig_hyp, n_obs, m_obs, tau=tau)
 
-    # Flatten outcome axes
-    lnl = lnl.reshape(-1, len(mu_sig_hyp))
-    p_outcome = p_outcome.reshape(-1, len(mu_sig_hyp))
+    # Get P(outcome | hypothesis); (outcome, hypothesis) array
+    p_outcome = _p_outcome(
+        mu_sig_hyp[None,:],
+        b_doublehat[None,:],
+        n[:,None],
+        m[:,None],
+        tau=tau)
+    # TODO: investigate where these are coming from
+    p_outcome = jnp.nan_to_num(p_outcome)
+    # Ensure weights of outcomes sum to one
+    p_outcome /= p_outcome.sum(axis=0)
+    return p_outcome
 
+
+@jax.jit
+def true_weights(mu_sig_hyp, mu_bg_hyp, n, m, *, tau):
+    """Return (outcomes, signal hypotheses, background hypotheses) array 
+    with weights of outcomes given the true signal and background hypotheses.
+
+    (i.e. P(outcome | sig, bg), normalized to sum to 1 over outcomes)
+    
+    Arguments:
+     - mu_sig_hyp: Array with signal rate hypotheses
+     - mu_bg_hyp: Array with background rate hypotheses
+     - n, m, tau: same as always
+    """
+    p_outcome = _p_outcome(
+        mu_sig_hyp[None,:,None], 
+        mu_bg_hyp[None,None,:], 
+        n[:,None,None], 
+        m[:,None,None],
+        tau=tau)
     # Ensure outcome weights sum to one
     p_outcome /= p_outcome.sum(axis=0)
-
-    if not return_outcomes:
-        return lnl, p_outcome
-    
-    # Also return n and m, stacked in a (2, n_outcomes) array
-    # Note the [...,0] to remove the shape-1 third dimension we added above
-    # (for easy broadcasting over the hypothesis dimension)
-    return lnl, p_outcome, jnp.stack([n[...,0].ravel(), m[...,0].ravel()])
+    return p_outcome
 
 
-def conditional_bestfit_bg(n, m, mu_sig_hyp, tau=1):
+@jax.jit
+def _p_outcome(mu_sig, mu_bg, n, m, *, tau):
+    return (
+        jax.scipy.stats.poisson.pmf(n, mu_sig + mu_bg)
+        * jax.scipy.stats.poisson.pmf(m, tau * mu_bg))
+
+
+@jax.jit
+def conditional_bestfit_bg(mu_sig_hyp, n, m, *, tau=1):
     """Return the conditional best fit background rate for an on-off experiment.
     See lnl_and_weights for details.
 

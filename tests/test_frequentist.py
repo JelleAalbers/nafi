@@ -36,4 +36,7 @@ def test_maximum_likelihood():
     y = f(x)
 
     # Test parabolic interpolation is exact 
-    assert np.allclose(nafi.maximum_likelihood(y[None,:])[0], 5.5)
+    assert np.allclose(
+        nafi.maximum_likelihood(y[None,:], interpolate=True)[0], 
+        5.5)
+

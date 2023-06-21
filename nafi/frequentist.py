@@ -17,17 +17,17 @@ DEFAULT_CLS = False
 
 @jax.jit
 def _parabola_vertex(x1, y1, x2, y2, x3, y3):
-    # From https://stackoverflow.com/a/717833
+    # From https://stackoverflow.com/questions/717762
     denom = (x1 - x2) * (x1 - x3) * (x2 - x3)
-    A     = (x3 * (y2 - y1) + x2 * (y1 - y3) + x1 * (y3 - y2)) / denom
-    B     = (x3*x3 * (y1 - y2) + x2*x2 * (y3 - y1) + x1*x1 * (y2 - y3)) / denom
-    C     = (x2 * x3 * (x2 - x3) * y1 + x3 * x1 * (x3 - x1) * y2 + x1 * x2 * (x1 - x2) * y3) / denom
-    return -B / (2*A), C - B*B / (4*A)
+    A     = (x3 * (y2 - y1) + x2 * (y1 - y3) + x1 * (y3 - y2))
+    B     = (x3**2 * (y1 - y2) + x2**2 * (y3 - y1) + x1**2 * (y2 - y3))
+    C     = (x2 * x3 * (x2 - x3) * y1 + x3 * x1 * (x3 - x1) * y2 + x1 * x2 * (x1 - x2) * y3)
+    return -B / (2*A), (C - B*B / (4*A))/denom
 
 
 @export
 @partial(jax.jit, static_argnames=('interpolate',))
-def maximum_likelihood(lnl, interpolate=True):
+def maximum_likelihood(lnl, interpolate=DEFAULT_INTERPOLATE_BESTFIT):
     """Return maximum likelihood, and index of best-fit hypothesis
     
     Returns two (|trials|, |n_sig|) arrays: the bestfit likelihood ratio and
@@ -43,23 +43,38 @@ def maximum_likelihood(lnl, interpolate=True):
 
     if not interpolate:
         return y, i
+    
+    # TODO: interpolating the best fit has a bug!
+    # Need unit tests for this..
 
     # Jax auto-clamps indices, so this won't crash
     y_prev = lnl[jnp.arange(n_outcomes), i - 1]
     y_next = lnl[jnp.arange(n_outcomes), i + 1]
+    # jax.debug.print(
+    #     "i-1 = {0}\ny_prev = {1}\ni = {2}\ny = {3}\ni+1 = {4}\ny_next = {5}",
+    #     i[14:19] - 1, 
+    #     y_prev[14:19],
+    #     i[14:19], 
+    #     y[14:19], 
+    #     i[14:19] + 1, 
+    #     y_next[14:19])
     i_itp, y_itp = _parabola_vertex(i - 1, y_prev, i, y, i + 1, y_next)
     # Return interpolated solution only if all the following hold:
     #   * The original i was not at the edge of the likelihood curve
     #     (in which case points left or right of it are missing)
     #   * i_itp is within [i-1, i+1], i.e. we are not extrapolating
     #   * y_itp is higher than y (it improves the fit)
+    #   * y_prev and y_next are both lower than y by a reasonable amount
+    #     to exclude numerical errors (since we usually use float32)
     # The last two shouldn't really be necessary if the interpolation is
     # working correctly, but I don't know what kinds of mad likelihoods
     # people will throw at this...
     allow_itp = (
         (i > 0) & (i < n_hyp - 1)
         & (jnp.abs(i_itp - i) <= 1)
-        & (y_itp > y))
+        & (y_itp > y)
+        & (jnp.minimum(y_prev, y_next) < 0.9 * (y_itp - 1e-1))
+        )
     y = jnp.where(allow_itp, y_itp, y)
     i = jnp.where(allow_itp, i_itp, i)
     return y, i
@@ -145,7 +160,7 @@ def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
 # if people try varying the freezing in some kind of loop, it will trigger
 # unexpected recompilation
 @export
-@partial(jax.jit, static_argnames=('freeze_truth_index',))
+@partial(jax.jit, static_argnames=('freeze_truth_index'))
 def neyman_pvals(ts, toy_weight, freeze_truth_index=None):
     """Compute p-values from test statistics ts using a Neyman construction
     
@@ -161,29 +176,91 @@ def neyman_pvals(ts, toy_weight, freeze_truth_index=None):
     if freeze_truth_index is not None:
         # Always evaluate with _one_ true hypothesis
         toy_weight = toy_weight[:,freeze_truth_index]
-        ps = jax.vmap(nafi.utils.weighted_ps, in_axes=(0, None))(ts.T, toy_weight).T
+        in_axes = (0, None)
     else:
-        # Compute weighted_ps independently for each hypothesis (final axis)
-        ps = jax.vmap(nafi.utils.weighted_ps, in_axes=0)(ts.T, toy_weight.T).T
+        # Compute weighted_ps independently for each hypothesis
+        in_axes = (0, 0)
+        toy_weight = toy_weight.T
+    ps = jax.vmap(nafi.utils.weighted_ps, in_axes=in_axes)(
+        ts.T, toy_weight).T
     return 1 - ps
 
 
-def neyman_pvals_nojax(ts, toy_weight, freeze_truth_index=None, progress=False):
-    """Compute p-values from test statistics ts using a Neyman construction"""
-    n_hyp = ts.shape[-1]
-    ps = np.zeros(ts.shape)
-    for hyp_i in nafi.utils.tqdm_maybe(progress)(
-            range(n_hyp), desc='Computing p-values', leave=False):
-        if freeze_truth_index is not None:
-            truth_i = freeze_truth_index
-        else:
-            truth_i = hyp_i
-        ps[...,hyp_i] = 1 - (
-            nafi.utils.weighted_ps(
-                ts[:,hyp_i], 
-                toy_weight[:,truth_i]
-            ).reshape(ts.shape[:-1]))
-    return ps
+@export
+@partial(jax.jit, static_argnames=('freeze_truth_index'))
+def neyman_pvals_presorted(order, sort_index, toy_weight, freeze_truth_index=None):
+    # Same as the above, in case te order and sort_index of the observations 
+    # is already known
+    if freeze_truth_index is not None:
+        toy_weight = toy_weight[:,freeze_truth_index]
+        in_axes = (0, 0, None)
+    else:
+        in_axes = (0, 0, 0)
+        toy_weight = toy_weight.T
+    ps = jax.vmap(nafi.utils._weighted_ps_presorted, in_axes=in_axes)(
+        order.T, sort_index.T, toy_weight).T
+    return 1 - ps
+
+
+# TODO: could we sensibly jit this even though it has a for loop?
+@export
+def neyman_pvals_weighted(
+        ts, hypotheses, weight_function, 
+        *outcomes, 
+        progress=True, freeze_truth_index=None, 
+        **parameters):
+    """Compute p-values from test statistics ts using a Neyman construction,
+        where hypothetical outcomes are weighted by a function of the observed 
+        outcome. This is used for the profile construction.
+    
+    Arguments:
+      - ts: test statistic, shape (n_outcomes, n_hypotheses)
+      - hypotheses: hypotheses, shape (n_hypotheses,)
+      - weight_function: function that returns weights of hypothetical outcomes
+        given an actually observed outcome. Called as:
+        weight_function(hypotheses, *outcomes, *observed_outcome, **parameters)
+      - outcomes: one or more (n_outcomes,) arrays of possible outcomes.
+            E.g. (n, m) arrays for a two-bin experiment.
+      - progress: whether to show a progress bar
+      - parameters: additional parameters to pass to weight_function
+    """
+    # Find the sort order of the observed test statistics
+    # Better do it now than in the loop over outcomes below
+    order, sort_index = jax.vmap(nafi.utils._order_and_index, in_axes=1)(ts)
+    order, sort_index = order.T, sort_index.T
+
+    @partial(jax.jit, static_argnames=('freeze_truth_index',))
+    def p_given_obs(
+            order, sort_index, 
+            mu_sig, 
+            *outcomes, 
+            outcome_i, 
+            freeze_truth_index=freeze_truth_index, 
+            **parameters):
+        ps = nafi.neyman_pvals_presorted(
+            order,
+            sort_index,
+            weight_function(
+                mu_sig, 
+                *outcomes,                           # Possible outcomes
+                *[r[outcome_i] for r in outcomes],   # Actually observed outcome
+                **parameters),
+            freeze_truth_index=freeze_truth_index,)
+        # Only care about the observed outcome..
+        return ps[outcome_i]
+
+    # Would love to do this in jax, but we get out of memory errors
+    # (probably due to the huge reduction at the end of p_given_obs)
+    # ps_2 = jax.vmap(p_2, in_axes=(None, None, None, None, None, None, 0))(
+    #     order, sort_index, mu_sig, tau, n, m, jnp.arange(n.size))
+    return np.stack([
+        p_given_obs(
+            order, sort_index, 
+            hypotheses, 
+            *outcomes, 
+            outcome_i=i, 
+            **parameters)
+        for i in nafi.utils.tqdm_maybe(progress)(range(outcomes[0].size))])
 
 
 @export
