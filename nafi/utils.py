@@ -78,6 +78,8 @@ def _weighted_ps_presorted(order, sort_index, w):
     w = w[order]
     # P of getting a x lower in the sort order
     p_ordered = jnp.cumsum(w) - w
+    # P of getting x equal or higher
+    p_ordered = 1 - p_ordered
     return p_ordered[sort_index]
 
 

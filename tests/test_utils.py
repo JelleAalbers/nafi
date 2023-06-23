@@ -34,30 +34,33 @@ def test_weighted_quantiles():
 
 
 def test_weighted_ps():
+    def _test(x, w, p):
+        np.testing.assert_array_almost_equal(
+            nafi.weighted_ps(
+                np.asarray(x), 
+                np.asarray(w)/np.sum(w)),
+            np.asarray(p))
+
     # Simple test with equal weights
-    np.testing.assert_array_almost_equal(
-        nafi.weighted_ps(
-            x=np.array([0, 0, 0, 3, 4,]), 
-            w=np.array([1, 1, 1, 1, 1,])/5),
-        np.array([0, 0, 0, 0.6, 0.8]))
+    _test(
+        x=[0, 0, 0, 3, 4,], 
+        w=[1, 1, 1, 1, 1,],
+        p=[1, 1, 1, 0.4, 0.2])
 
     # Order of values doesn't matter
-    np.testing.assert_array_almost_equal(
-        nafi.weighted_ps(
-            x=np.array([0, 4, 0, 3, 0,]), 
-            w=np.array([1, 1, 1, 1, 1,])/5),
-        np.array([0, 0.8, 0, 0.6, 0]))
+    _test(
+        x=[0, 4, 0, 3, 0,], 
+        w=[1, 1, 1, 1, 1,],
+        p=[1, 0.2, 1, 0.4, 1])
 
     # Repeated values are handled correctly
-    np.testing.assert_array_almost_equal(
-        nafi.weighted_ps(
-            x=np.array([0, 4, 4, 3, 0,]), 
-            w=np.array([1, 1, 1, 1, 1,])/5),
-        np.array([0, 0.6, 0.6, 0.4, 0]))
+    _test(
+        x=[0, 4, 4, 3, 0,], 
+        w=[1, 1, 1, 1, 1,],
+        p=[1, 0.4, 0.4, 0.6, 1])
 
     # Weights don't have to be equal
-    np.testing.assert_array_almost_equal(
-        nafi.weighted_ps(
-            x=np.array([0, 4, 4, 3,]), 
-            w=np.array([2, 1, 1, 1,])/5),
-        np.array([0, 0.6, 0.6, 0.4]))
+    _test(
+        x=[0, 4, 4, 3,], 
+        w=[2, 1, 1, 1,],
+        p=[1, 0.4, 0.4, 0.6])

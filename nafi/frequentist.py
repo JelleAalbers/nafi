@@ -131,7 +131,8 @@ def test_statistic(
 @export
 @partial(jax.jit, static_argnames=('statistic', 'cls'))
 def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
-    """Compute asymptotic frequentist p-value for test statistics ts
+    """Compute asymptotic frequentist right-tailed p-value for 
+        test statistics ts.
     
     Arguments:
         ts: array of test statistics
@@ -162,7 +163,8 @@ def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
 @export
 @partial(jax.jit, static_argnames=('freeze_truth_index'))
 def neyman_pvals(ts, toy_weight, freeze_truth_index=None):
-    """Compute p-values from test statistics ts using a Neyman construction
+    """Compute right-tailed p-values from test statistics ts using a 
+        Neyman construction.
     
     Arguments:
         ts: array of test statistics, shape (n_trials, n_hypotheses)
@@ -181,9 +183,8 @@ def neyman_pvals(ts, toy_weight, freeze_truth_index=None):
         # Compute weighted_ps independently for each hypothesis
         in_axes = (0, 0)
         toy_weight = toy_weight.T
-    ps = jax.vmap(nafi.utils.weighted_ps, in_axes=in_axes)(
+    return jax.vmap(nafi.utils.weighted_ps, in_axes=in_axes)(
         ts.T, toy_weight).T
-    return 1 - ps
 
 
 @export
@@ -209,9 +210,10 @@ def neyman_pvals_weighted(
         *outcomes, 
         progress=True, freeze_truth_index=None, 
         **parameters):
-    """Compute p-values from test statistics ts using a Neyman construction,
-        where hypothetical outcomes are weighted by a function of the observed 
-        outcome. This is used for the profile construction.
+    """Compute right-tailed p-values from test statistics ts using a 
+        Neyman construction, where hypothetical outcomes are weighted by a
+        function of the observed outcome. 
+        This is used for the profile construction.
     
     Arguments:
       - ts: test statistic, shape (n_outcomes, n_hypotheses)
@@ -271,11 +273,19 @@ def cls_pvals(ts, toy_weight, neyman_ps=None):
     if neyman_ps is None:
         neyman_ps = neyman_pvals(ts, toy_weight)
     ps_0 = neyman_pvals(ts, toy_weight, freeze_truth_index=0)
+
     # PDG review and other CLs texts have a 1- in the denominator
     # because they define "p_b" to be a CDF value (integrate distribution 
     # from -inf to the observed value), unlike "p_{s+b}".
     # Our ps are both survival function values (integrate distribution from
     # observed value to +inf)
+
+    # This definition assumes the statistics are like q_mu, i.e.
+    # decreasing if we add more events. If using a statistic with the opposite
+    # behaviour (as older CLs papers do), we would left-tailed p-values. 
+    # Note these are not equal to 1 - right tailed values
+    # when the test statistic distribution is discrete!
+
     return neyman_ps / ps_0
 
 
