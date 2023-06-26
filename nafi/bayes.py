@@ -145,6 +145,26 @@ def bayesian_pvals(lnl, hypotheses, interval_type='hdpi', ln_prior=None):
 
 @export
 @jax.jit
+def posterior_cdf_quantile(posterior_cdf, hypotheses, quantile):
+    """Return hypotheses where posterior CDF reaches a quantile
+    
+    Arguments:
+        - posterior_cdf: (outcomes, hypotheses) array
+        - hypotheses: hypotheses, shape (n_hypotheses,)
+        - quantile: quantile to find, (outcomes,) array
+        0 <= quantile <= 1
+    """
+    return jax.vmap(nafi.intervals, in_axes=(0, None, None, 0))(
+            1 - posterior_cdf,
+            # hypotheses =
+            hypotheses,
+            # interpolate=
+            True,
+            # cl=
+            quantile)[1]
+
+@export
+@jax.jit
 def min_cred_ul(posterior_cdf, hypotheses, ll, cl=0.9):
     """Return upper limits so that the intervals with the lower limit ll 
     have credibility cl.
@@ -156,25 +176,61 @@ def min_cred_ul(posterior_cdf, hypotheses, ll, cl=0.9):
         See nafi.posterior_cdf, don't just cumsum your posterior if you care 
         about off-by-half errors.
      - hypotheses: hypotheses, shape (n_hypotheses,)
-     - ll: lower limits, shape (n_outcomes,). If omitted, uses hypotheses[0].
+     - ll: lower limits, shape (n_outcomes,).
      - cl: credibility level, default 0.9
     """
+    # Credibility of (0, ll)
     inv_cred_ll = nafi.credibility(
         posterior_cdf,
         hypotheses, 
         hypotheses[0] + 0 * ll,
         ll)
         
-    # Desired posterior quantile
+    # Desired posterior quantile for the ul
     min_cred_q = (inv_cred_ll + cl).clip(0, 1)
-    # UL which, together with ll, gives a credible interval
-    _, ul_mincred = jax.vmap(nafi.intervals, in_axes=(0, None, None, 0))(
-        # Bayesian UL p-vals = 1 - posterior CDF
-        1 - posterior_cdf,
-        # hypotheses =
-        hypotheses,
-        # interpolate=
-        True,
-        # cl=
-        min_cred_q)
-    return ul_mincred
+
+    return posterior_cdf_quantile(posterior_cdf, hypotheses, min_cred_q)
+
+
+@export
+@jax.jit
+def repair_cred(posterior_cdf, hypotheses, ul, ll, cl=0.9):
+    """Widen (ul, ll) to have credibility at least cl; 
+    first by lowering the ll then raising then ul if needed.
+
+    (That way the overcoverage is concentrated on lower hypotheses)
+    
+    Experimental function, may be removed later.
+
+    Arguments:
+     - posterior_cdf: posterior CDF, shape (n_outcomes, n_hypotheses,)
+        See nafi.posterior_cdf, don't just cumsum your posterior if you care 
+        about off-by-half errors.
+     - hypotheses: hypotheses, shape (n_hypotheses,)
+     - ul: upper limits, shape (n_outcomes,).
+     - ll: lower limits, shape (n_outcomes,).
+     - cl: credibility level, default 0.9
+    """
+    # Credibility of (0, ul)
+    cred_ul = nafi.credibility(posterior_cdf, hypotheses, ll * 0 + hypotheses[0], ul)
+
+    # Posterior CDF quantile where we should place the ll
+    desired_q_ll = (cred_ul - cl).clip(0, 1)
+    ll = jnp.minimum(
+        ll,
+        posterior_cdf_quantile(posterior_cdf, hypotheses, desired_q_ll)
+    )
+
+    # Credibility of (0, ll)
+    inv_cred_ll = nafi.credibility(
+        posterior_cdf,
+        hypotheses, 
+        hypotheses[0] + 0 * ll,
+        ll)
+    
+    desired_q_ul = (inv_cred_ll + cl).clip(0, 1)
+    ul = jnp.maximum(
+        ul,
+        posterior_cdf_quantile(posterior_cdf, hypotheses, desired_q_ul)
+    )
+    return ll, ul
