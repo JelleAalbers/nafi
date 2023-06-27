@@ -53,24 +53,16 @@ def weighted_quantile_sorted(values, weights, quantiles):
     return values[idx]
 
 
-
 @export
 @jax.jit
 def weighted_ps(x, w):
-    return _weighted_ps_presorted(*_order_and_index(x), w)
-
-
-@jax.jit
-def _order_and_index(x):
-    # indices that would sort x
-    order = jnp.argsort(x)
-
-    # Indices where you would place each x in sorted array
-    # If all t are distinct, this is equal to the rank order
-    # = jnp.argsort(order) ?
-    sort_index = jnp.searchsorted(x[order], x)#.clip(0, len(x))
-
-    return order, sort_index
+    """Return probability of getting a value equal or higher than x.
+    
+    Arguments:
+        - x: values, 1d array
+        - w: weights, 1d array
+    """
+    return _weighted_ps_presorted(*_order_and_index_1d(x), w)
 
 
 @jax.jit
@@ -84,7 +76,38 @@ def _weighted_ps_presorted(order, sort_index, w):
 
 
 @export
+@jax.jit
+def order_and_index(ts):
+    """Return outcome-dependent ordering and ranking of ts.
+
+    Arguments:
+      - ts: test statistics, (outcomes, hypotheses) array
+
+    Returns:
+      - order: number of outcomes with lower t for each hypothesis.
+      - sort_index: rank order of outcome for each hypothesis,
+            with equal outcomes assigned the same, lowest, rank.
+    """
+    return jax.vmap(_order_and_index_1d, in_axes=1, out_axes=1)(ts)
+
+
+@jax.jit
+def _order_and_index_1d(x):
+    # indices that would sort x
+    order = jnp.argsort(x)
+
+    # Indices where you would place each x in sorted array
+    # If all t are distinct, this would be equal to the rank order
+    # (jnp.argsort(order), if I'm not mistaken)
+    sort_index = jnp.searchsorted(x[order], x).clip(0, len(x))
+
+    return order, sort_index
+
+
+@export
 def tqdm_maybe(progress=False):
+    # The unused **kwargs is relevant, it ignores other arguments tqdm takes
+    # (like total and desc)
     return tqdm if progress else lambda x, **kwargs: x
 
 

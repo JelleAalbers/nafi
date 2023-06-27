@@ -157,9 +157,10 @@ def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
     return ps
 
 
-# Bit of a hack to use static_argnames for freeze_truth_index;
-# if people try varying the freezing in some kind of loop, it will trigger
-# unexpected recompilation
+# Bit of a hack to use static_argnames for freeze_truth_index below;
+# if people try varying the frozen index in some kind of loop, it will trigger
+# unexpected recompilation. But for CLs we just always freeze to one hypothesis;
+
 @export
 @partial(jax.jit, static_argnames=('freeze_truth_index'))
 def neyman_pvals(ts, toy_weight, freeze_truth_index=None):
@@ -169,38 +170,41 @@ def neyman_pvals(ts, toy_weight, freeze_truth_index=None):
     Arguments:
         ts: array of test statistics, shape (n_trials, n_hypotheses)
         toy_weight: array of toy outcome weights, same shape
-        freeze_truth_index: If set, freeze the toy weights to the given 
+        freeze_truth_index: If set, freezes the toy weights to the given 
             hypothesis index. Useful for CLs.
 
     """
-    # For some reason, vmap over in_axis=0 is much faster than in_axis=-1 and 
+    return neyman_pvals_from_ordering(
+        *nafi.order_and_index(ts), toy_weight, 
+        freeze_truth_index=freeze_truth_index)
+
+
+@partial(jax.jit, static_argnames=('freeze_truth_index'))
+def neyman_pvals_from_ordering(
+        order, sort_index, toy_weight, 
+        freeze_truth_index=None):
+    """Return right-tailed p-values of outcomes given an hypothesis-dependent
+    ordering of outcomes.
+
+    Arguments:
+        order, sort_index: ordering of outcomes, from nafi.order_and_index.
+            Both are (n_outcomes, n_hypotheses) arrays.
+        toy_weight: array of toy outcome weights, same shape.
+        freeze_truth_index: If set, freezes the toy weights to the given 
+            hypothesis index. Useful for CLs.
+    """
+    # For some reason, vmap over in_axis=0 is much faster than in_axis=1 and 
     # transposing the inputs... hm....
     if freeze_truth_index is not None:
         # Always evaluate with _one_ true hypothesis
         toy_weight = toy_weight[:,freeze_truth_index]
-        in_axes = (0, None)
-    else:
-        # Compute weighted_ps independently for each hypothesis
-        in_axes = (0, 0)
-        toy_weight = toy_weight.T
-    return jax.vmap(nafi.utils.weighted_ps, in_axes=in_axes)(
-        ts.T, toy_weight).T
-
-
-@export
-@partial(jax.jit, static_argnames=('freeze_truth_index'))
-def neyman_pvals_presorted(order, sort_index, toy_weight, freeze_truth_index=None):
-    # Same as the above, in case te order and sort_index of the observations 
-    # is already known
-    if freeze_truth_index is not None:
-        toy_weight = toy_weight[:,freeze_truth_index]
         in_axes = (0, 0, None)
     else:
+        # Compute weighted_ps independently for each hypothesis
         in_axes = (0, 0, 0)
         toy_weight = toy_weight.T
-    ps = jax.vmap(nafi.utils._weighted_ps_presorted, in_axes=in_axes)(
+    return jax.vmap(nafi.utils._weighted_ps_presorted, in_axes=in_axes)(
         order.T, sort_index.T, toy_weight).T
-    return 1 - ps
 
 
 # TODO: could we sensibly jit this even though it has a for loop?
@@ -226,43 +230,51 @@ def neyman_pvals_weighted(
       - progress: whether to show a progress bar
       - parameters: additional parameters to pass to weight_function
     """
-    # Find the sort order of the observed test statistics
-    # Better do it now than in the loop over outcomes below
-    order, sort_index = jax.vmap(nafi.utils._order_and_index, in_axes=1)(ts)
-    order, sort_index = order.T, sort_index.T
-
-    @partial(jax.jit, static_argnames=('freeze_truth_index',))
-    def p_given_obs(
-            order, sort_index, 
-            mu_sig, 
-            *outcomes, 
-            outcome_i, 
-            freeze_truth_index=freeze_truth_index, 
-            **parameters):
-        ps = nafi.neyman_pvals_presorted(
-            order,
-            sort_index,
-            weight_function(
-                mu_sig, 
-                *outcomes,                           # Possible outcomes
-                *[r[outcome_i] for r in outcomes],   # Actually observed outcome
-                **parameters),
-            freeze_truth_index=freeze_truth_index,)
-        # Only care about the observed outcome..
-        return ps[outcome_i]
+    # Find the sort order of outcomes by test statistic, for each hypothesis.
+    # (Should do this now rather than in the loop over outcomes below!)
+    order, sort_index = nafi.order_and_index(ts)
 
     # Would love to do this in jax, but we get out of memory errors
     # (probably due to the huge reduction at the end of p_given_obs)
     # ps_2 = jax.vmap(p_2, in_axes=(None, None, None, None, None, None, 0))(
     #     order, sort_index, mu_sig, tau, n, m, jnp.arange(n.size))
     return np.stack([
-        p_given_obs(
+        _profile_p_given_obs(
+            weight_function,
             order, sort_index, 
             hypotheses, 
             *outcomes, 
             outcome_i=i, 
+            freeze_truth_index=freeze_truth_index,
             **parameters)
         for i in nafi.utils.tqdm_maybe(progress)(range(outcomes[0].size))])
+
+
+@partial(jax.jit, static_argnames=('weight_function', 'freeze_truth_index',))
+def _profile_p_given_obs(
+        weight_function,
+        order, sort_index, 
+        hypotheses, 
+        *outcomes, 
+        outcome_i, 
+        freeze_truth_index, 
+        **parameters):
+    """Return p-value of the outcome with index outcome_i, weighting 
+    hypothetical outcomes with a weight_function that depends on the actually
+    observed outcome (as in the profile construction).
+    """
+    # Weights of all hypothetical outcomes
+    weights = weight_function(
+        hypotheses, 
+        *outcomes,                           # Possible outcome
+        *[r[outcome_i] for r in outcomes],   # Actually observed outcome
+        **parameters)
+    # P-values of all outcomes
+    ps = neyman_pvals_from_ordering(
+        order, sort_index, weights,
+        freeze_truth_index=freeze_truth_index)
+    # Only care about the observed outcome..
+    return ps[outcome_i]
 
 
 @export
@@ -270,9 +282,12 @@ def cls_pvals(ts, toy_weight, neyman_ps=None):
     """Compute p-value ratios used in the CLs method. 
     First hypothesis must be background-only.
     """
+    order, sort_index = nafi.order_and_index(ts)
     if neyman_ps is None:
-        neyman_ps = neyman_pvals(ts, toy_weight)
-    ps_0 = neyman_pvals(ts, toy_weight, freeze_truth_index=0)
+        neyman_ps = neyman_pvals_from_ordering(
+            order, sort_index, toy_weight)
+    ps_0 = neyman_pvals_from_ordering(
+        order, sort_index, toy_weight, freeze_truth_index=0)
 
     # PDG review and other CLs texts have a 1- in the denominator
     # because they define "p_b" to be a CDF value (integrate distribution 
@@ -282,10 +297,9 @@ def cls_pvals(ts, toy_weight, neyman_ps=None):
 
     # This definition assumes the statistics are like q_mu, i.e.
     # decreasing if we add more events. If using a statistic with the opposite
-    # behaviour (as older CLs papers do), we would left-tailed p-values. 
-    # Note these are not equal to 1 - right tailed values
-    # when the test statistic distribution is discrete!
-
+    # behaviour (as older CLs papers do), we would need left-tailed p-values. 
+    # (And left- and right-tailed p-values are not just 1 - complements of each
+    #  other, since multiple outcomes may achieve the same test statistic.)
     return neyman_ps / ps_0
 
 

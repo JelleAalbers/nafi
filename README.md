@@ -29,7 +29,7 @@ mu_bg = 10
 lnl, weights = counting.lnl_and_weights(mu_sig=hypotheses, mu_bg=mu_bg)
 
 # Compute test statistics and p-values
-# The default test statistic is t = L(hypothesis)/L(bestfit)
+# The default test statistic is t = -2 ln[ L(hypothesis)/L(bestfit) ]
 ts, ps = nafi.ts_and_pvals(lnl, weights)
 
 # Confidence intervals on your toy data

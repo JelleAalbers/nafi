@@ -45,3 +45,6 @@ docs/_build
 # Data
 *.pkl
 *.csv
+
+# Unfinished notebooks
+notebooks_jelle
