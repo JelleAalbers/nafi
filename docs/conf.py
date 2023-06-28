@@ -27,7 +27,6 @@ release = '0.0.0'
 
 extensions = [
     "myst_parser",
-    "matplotlib.sphinxext.plot_directive",
     "sphinx.ext.mathjax",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
