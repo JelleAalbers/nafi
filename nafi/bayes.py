@@ -27,11 +27,22 @@ def uniform_prior(hypotheses):
     """Return prior over hypotheses corresponding to a uniform prior density 
     over the parameter of interest.
 
-    Specifically, prior(h) will be
-        P(h - dh/2 <= truth <= h + dh/2)    for interior hypotheses;
-        P(h <= truth <= h + dh/2)           for the first hypothesis;
-        P(h - dh/2 <= truth <= h])          for the last hypothesis.
-    where dh is the gradient/spacing between hypotheses.
+    Specifically, the return value represents the following probabilities:
+
+    .. math::
+        P(h - dh/2 <= truth <= h + dh/2)
+
+    for interior hypotheses;
+
+    .. math::
+        P(h <= truth <= h + dh/2)
+
+    for the first hypothesis;
+
+    .. math::
+        P(h - dh/2 <= truth <= h])
+
+    for the last hypothesis. Here dh is the gradient/spacing between hypotheses.
     """
     prior = hypothesis_spacing(hypotheses)
     prior /= jnp.sum(prior)
@@ -44,9 +55,9 @@ def posterior(lnl, hypotheses, ln_prior=None):
     """Compute posterior from log likelihood(ratio)s
 
     Arguments:
-     - lnl: Log likelihood(ratio)s, (trials, hypotheses)
-     - hypotheses: Hypotheses to compute p-values for.
-     - ln_prior: Log of prior, (hypotheses) array. 
+      lnl: Log likelihood(ratio)s, (trials, hypotheses)
+      hypotheses: Hypotheses to compute p-values for.
+      ln_prior: Log of prior, (hypotheses) array. 
         If not provided, assumed proportional to the spacing between hypotheses,
         so the prior density is flat/uniform in the parameter of interest.
 
@@ -72,12 +83,27 @@ def posterior_cdf(posterior):
     """Compute cumulative posterior, assuming the hypotheses are a discrete
     approximation for a continuous parameter.
 
-    In particular, this returns P(truth <= h) = P(truth < h),
-    and we assume posterior(h) represents:
-        P(h - dh/2 < truth < h + dh/2)    for interior hypotheses;
-        P(h < truth < h + dh/2)           for the first hypothesis;
-        P(h - dh/2 < truth < h])          for the last hypothesis.
-    where dh is the gradient/spacing between hypotheses.
+    In particular, we assume
+     
+    .. math::
+       P(truth \leq h) = P(truth < h)
+
+    and the returned posterior CDF represents:
+
+    .. math::
+        P(h - dh/2 < truth < h + dh/2)
+
+    for interior hypotheses;
+
+    .. math::
+        P(h < truth < h + dh/2)
+
+    for the first hypothesis, and
+
+    .. math::
+        P(h - dh/2 < truth < h])
+
+    for the last hypothesis. Here dh is the gradient/spacing between hypotheses.
     """
     # This computes P(truth <= max[x + dx/2, hyp[-1]])
     posterior_cdf = jnp.cumsum(posterior, axis=-1)
@@ -97,12 +123,12 @@ def bayesian_pvals(lnl, hypotheses, interval_type='hdpi', ln_prior=None):
     for use in nafi.intervals.
 
     Arguments:
-     - lnl: Log likelihood(ratio)s, (trials, hypotheses)
-     - hypotheses: Hypotheses to compute p-values for.
-     - interval_type: Interval type for which to compute p-values, either
+      lnl: Log likelihood(ratio)s, (trials, hypotheses)
+      hypotheses: Hypotheses to compute p-values for.
+      interval_type: Interval type for which to compute p-values, either
         'hdpi' (high-density posterior, default), or 'ul' (upper limit), 
         or 'll' (lower limit). Note 'll' will give the CDF.
-     - ln_prior: Log of prior, (hypotheses) array. 
+      ln_prior: Log of prior, (hypotheses) array. 
         If not provided, assumed proportional to the spacing between hypotheses,
         so the prior density is flat/uniform in the parameter of interest.
     """
@@ -149,9 +175,9 @@ def posterior_cdf_quantile(posterior_cdf, hypotheses, quantile):
     """Return hypotheses where posterior CDF reaches a quantile
     
     Arguments:
-        - posterior_cdf: (outcomes, hypotheses) array
-        - hypotheses: hypotheses, shape (n_hypotheses,)
-        - quantile: quantile to find, (outcomes,) array
+      posterior_cdf: (outcomes, hypotheses) array
+      hypotheses: hypotheses, shape (n_hypotheses,)
+      quantile: quantile to find, (outcomes,) array
         0 <= quantile <= 1
     """
     return jax.vmap(nafi.intervals, in_axes=(0, None, None, 0))(
@@ -172,12 +198,12 @@ def min_cred_ul(posterior_cdf, hypotheses, ll, cl=0.9):
     Experimental function, may be removed later.
 
     Arguments:
-     - posterior_cdf: posterior CDF, shape (n_outcomes, n_hypotheses,)
+      posterior_cdf: posterior CDF, shape (n_outcomes, n_hypotheses,)
         See nafi.posterior_cdf, don't just cumsum your posterior if you care 
         about off-by-half errors.
-     - hypotheses: hypotheses, shape (n_hypotheses,)
-     - ll: lower limits, shape (n_outcomes,).
-     - cl: credibility level, default 0.9
+      hypotheses: hypotheses, shape (n_hypotheses,)
+      ll: lower limits, shape (n_outcomes,).
+      cl: credibility level, default 0.9
     """
     # Credibility of (0, ll)
     inv_cred_ll = nafi.credibility(
@@ -203,13 +229,13 @@ def repair_cred(posterior_cdf, hypotheses, ul, ll, cl=0.9):
     Experimental function, may be removed later.
 
     Arguments:
-     - posterior_cdf: posterior CDF, shape (n_outcomes, n_hypotheses,)
+      posterior_cdf: posterior CDF, shape (n_outcomes, n_hypotheses,)
         See nafi.posterior_cdf, don't just cumsum your posterior if you care 
         about off-by-half errors.
-     - hypotheses: hypotheses, shape (n_hypotheses,)
-     - ul: upper limits, shape (n_outcomes,).
-     - ll: lower limits, shape (n_outcomes,).
-     - cl: credibility level, default 0.9
+      hypotheses: hypotheses, shape (n_hypotheses,)
+      ul: upper limits, shape (n_outcomes,).
+      ll: lower limits, shape (n_outcomes,).
+      cl: credibility level, default 0.9
     """
     # Credibility of (0, ul)
     cred_ul = nafi.credibility(posterior_cdf, hypotheses, ll * 0 + hypotheses[0], ul)

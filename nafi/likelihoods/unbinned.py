@@ -1,13 +1,5 @@
-"""Methods for producing likelihood ratios for an unbinned likelihoods
+"""Classes for modelling likelihood ratios for an unbinned likelihoods
 without nuisance parameters.
-
-The model is a 
-
-End goal is an (BATCH, n_sig, hypothesis_i) tensor of likelihood ratios,
-where 
- - BATCH is a batch dimension, i.e. over different MC toys
- - n_sig is the number of generated signal events
- - hypothesis_i indexes the hypothesis (signal rate)
 """
 from functools import partial
 
@@ -25,6 +17,10 @@ class UnbinnedSignalBackground:
     """Simulation and (extended) unbinned log likelihood for
     two Poisson processes (signal and background) distinguished
     by a single observable per event (e.g. energy or position).
+
+    To specify your own signal and background distributions, inherit from this
+    class and override the simulate_signal, simulate_background, and
+    differential_rate methods. See the TwoGaussians class for an example.
     """
 
     required_params = tuple()
@@ -161,7 +157,6 @@ class UnbinnedSignalBackground:
 
         return lnl, toy_weight, summary
 
-
     def _drs_one_source(
             self, mu, key, n_max, simulate, poisson, n_trials, mu_sig_hyp, mu_bg,
             params):
@@ -248,13 +243,19 @@ class UnbinnedSignalBackground:
         """Simulate (n_trials, n_max) background events"""
         raise NotImplementedError
     
+    def differential_rate(self, x, mu_sig, mu_bg, params):
+        """Return differential rate for events with observed x
+        """
+        raise NotImplementedError    
+
 
 @export
 class TwoGaussians(UnbinnedSignalBackground):
-    """Simulation and (extended) unbinned log likelihood for
-        two Poisson processes with a single observable per event:
-            signal: x ~ Normal(mean=0, stdev=1)
-            sackground: x ~ Normal(mean=sigma_sep, stdev=1)
+    """Simulation and (extended) unbinned log likelihood for a signal and
+    background that are both Gaussians with unit variance, but different means.
+
+    Takes a single parameter, ``sigma_sep``, the distance between the signal
+    and background means.
     """
 
     required_params = ('sigma_sep',)

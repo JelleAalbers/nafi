@@ -59,8 +59,8 @@ def weighted_ps(x, w):
     """Return probability of getting a value equal or higher than x.
     
     Arguments:
-        - x: values, 1d array
-        - w: weights, 1d array
+        x: values, 1d array
+        w: weights, 1d array
     """
     return _weighted_ps_presorted(*_order_and_index_1d(x), w)
 
@@ -81,12 +81,12 @@ def order_and_index(ts):
     """Return outcome-dependent ordering and ranking of ts.
 
     Arguments:
-      - ts: test statistics, (outcomes, hypotheses) array
+      ts: test statistics, (outcomes, hypotheses) array
 
-    Returns:
-      - order: number of outcomes with lower t for each hypothesis.
-      - sort_index: rank order of outcome for each hypothesis,
-            with equal outcomes assigned the same, lowest, rank.
+    Returns a tuple (order, sort_index), both of arrays of the same shape as ts.
+        Here order is the number of outcomes with lower t for each hypothesis,
+        and sort_index is the rank order of the outcome for each hypothesis,
+        with equal outcomes assigned the same, lowest, rank.
     """
     return jax.vmap(_order_and_index_1d, in_axes=1, out_axes=1)(ts)
 
@@ -112,8 +112,8 @@ def find_root_vec(y0, y, x, i):
     If y is (a, b), x should be (b,), and the result will be (a,).
     i is an integer array (a, c) with indices into the (b) dimension.
 
-        This is useful with e.g. c = 2 or 3 to select a neighbourhood around the 
-        root.
+    This is useful with e.g. c = 2 or 3 to select a neighbourhood around the 
+    root.
 
     y[:,c] _must_ be increasing in the second dimension! This is a limitation
     we inherit from jnp.interp.
@@ -144,8 +144,8 @@ def poisson_ul(n, cl=0.9):
     """Return upper limit for a Poisson process with n observed events.
 
     Arguments:
-     - n: number of observed events
-     - cl: confidence level
+        n: number of observed events
+        cl: confidence level
     """
     # Analytical solution for classical Poisson upper limit
     # (not the same as upper endpoint of FC interval)

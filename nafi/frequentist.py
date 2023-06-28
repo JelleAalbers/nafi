@@ -20,12 +20,14 @@ DEFAULT_CLS = False
 def maximum_likelihood(lnl, interpolate=DEFAULT_INTERPOLATE_BESTFIT):
     """Return maximum likelihood, and index of best-fit hypothesis
     
-    Returns two (|trials|, |n_sig|) arrays: the bestfit likelihood ratio and
-    index of best-fit hypothesis.
+    Returns a tuple (y, i) of (n_trials, n_hypothesis) arrays, where y is the
+        bestfit likelihood ratio and i the index of best-fit hypothesis.
 
-    If interpolate=True, the bestfit log likelihood is interpolated 
-        ~parabolically when not at the edge of the likelihood curve.
-        The returned index is unchanged.
+    Arguments:
+        lnl: (n_trials, n_hypotheses) array of log likelihoods
+        interpolate: If True (default), the bestfit log likelihood is 
+            interpolated parabolically when not at the edge of the likelihood 
+            curve. The returned index i remains an interger.
     """
     n_outcomes, n_hyp = lnl.shape
     i = jnp.argmax(lnl, axis=-1)
@@ -58,20 +60,24 @@ def maximum_likelihood(lnl, interpolate=DEFAULT_INTERPOLATE_BESTFIT):
 
 @export
 @partial(jax.jit, static_argnames=('statistic', 'interpolate_bestfit'))
-def test_statistic(
+def test_statistics(
         lnl, 
         statistic=DEFAULT_TEST_STATISTIC, 
         interpolate_bestfit=DEFAULT_INTERPOLATE_BESTFIT):
-    """Return test statistic computed from likelihood curves
+    """Return test statistic computed from likelihood curves.
+
+    The following statistics are supported:
+    
+      - ``t``: ``-2ln[ L(hypothesis)/L(bestfit) ]``
+      - ``q``: as t, but zero if hypothesis <= bestfit (data is an excess), 
+      - ``q0``: ``-2ln[ L(bestfit)/L(0) ]``, where '0' is the first hypothesis
+      - ``lep``: ``-2ln[ L(hypothesis)/L(0) ]``
+      - ``signedt``: as t, but -t if hypothesis <= bestfit (data is an excess)
+      - ``signedtroot``: sqrt(t), but -sqrt(t) if hypothesis <= bestfit
 
     Arguments:
-        lnl: (|n_trials|, |n_hypotheses|) array of log likelihoods
-        statistic: 't' or 'q' or 'q0' or 'lep'
-            * t is L(hypothesis)/L(bestfit)
-            * q is t, but zero if hypothesis <= bestfit (data is an excess), 
-            * q0 is L(bestfit)/L(0)
-            * lep is L(hypothesis)/L(0)
-            * signedt is t, but -t if hypothesis < bestfit (data is an excess)
+        lnl: (n_trials, n_hypotheses) array of log likelihoods
+        statistic: name of the test statistic to use.
         interpolate_bestfit: If True, use interpolation to estimate 
             the best-fit hypothesis more precisely.
 
@@ -83,14 +89,16 @@ def test_statistic(
     lnl_best, best_i = maximum_likelihood(lnl, interpolate=interpolate_bestfit)
 
     # Compute statistics (|n_trials|,|n_hyps|)
-    if statistic in ('t', 'q', 'signedt'):
+    if statistic in ('t', 'q', 'signedt', 'signedtroot'):
         ts = -2 * (lnl - lnl_best[...,None])
-        if statistic in ('q', 'signedt'):
+        if statistic in ('q', 'signedt', 'signedtroot'):
             is_excess = jnp.arange(n_hyp)[None,:] <= best_i[...,None]
             if statistic == 'q':
                 ts = jnp.where(is_excess, 0, ts)
             else:
                 ts = jnp.where(is_excess, -ts, ts)
+                if statistic == 'signedtroot':
+                    ts = jnp.sqrt(ts)
     elif statistic == 'q0':
         # L(best)/L(0). Note this does not depend on the hypothesis.
         # Assuming hypothesis 0 is background only!
@@ -108,28 +116,28 @@ def test_statistic(
 @partial(jax.jit, static_argnames=('statistic', 'cls'))
 def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
     """Compute asymptotic frequentist right-tailed p-value for 
-        test statistics ts.
+    test statistics ts.
     
     Arguments:
         ts: array of test statistics
-        statistic: 't' or 'q'
+        statistic: test statistic used; only 't' or 'q' implemented currently.
         cls: If True, use asymptotic formulae appropriate for the CLs method 
             instead of those for a frequentist/Neyman construction.
-            (Currently just raises NotImplementedError)
+            (Currently this just raises NotImplementedError.)
     """
     # Compute asymptotic p-values
-    if statistic not in ('t', 'q'):
-        raise ValueError("Don't know the asymptotic distribution "
-                         f"of statistic {statistic}")
     if cls:
         raise NotImplementedError(
             "CLs asymptotics... might as well join LHC at this point")
-    # q's distribution has a delta function at 0, but since 0 is the lowest
-    # possible value, it never contributes to the survival function.
-    # The special function scipy uses here is quite expensive.
-    ps = 1 - jax.scipy.stats.chi2.cdf(ts, df=1)
-    if statistic == 'q':
-        ps *= 0.5
+    if statistic in ('t', 'q'):
+        # The special function scipy uses here is quite expensive.
+        ps = 1 - jax.scipy.stats.chi2.cdf(ts, df=1)
+        if statistic == 'q':
+            # q's distribution has a delta function at 0.
+            ps = jnp.where(ts == 0, 1, 0.5 * ps)
+    else:
+        raise NotImplementedError(
+            "No asymptotic distribution implemented for statistic {statistic}")
     return ps
 
 
@@ -141,7 +149,7 @@ def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
 @partial(jax.jit, static_argnames=('freeze_truth_index'))
 def neyman_pvals(ts, toy_weight, freeze_truth_index=None):
     """Compute right-tailed p-values from test statistics ts using a 
-        Neyman construction.
+    Neyman construction.
     
     Arguments:
         ts: array of test statistics, shape (n_trials, n_hypotheses)
@@ -191,20 +199,20 @@ def neyman_pvals_weighted(
         progress=True, freeze_truth_index=None, 
         **parameters):
     """Compute right-tailed p-values from test statistics ts using a 
-        Neyman construction, where hypothetical outcomes are weighted by a
-        function of the observed outcome. 
-        This is used for the profile construction.
+    Neyman construction, where hypothetical outcomes are weighted by a
+    function of the observed outcome. 
+    This is used for the profile construction.
     
     Arguments:
-      - ts: test statistic, shape (n_outcomes, n_hypotheses)
-      - hypotheses: hypotheses, shape (n_hypotheses,)
-      - weight_function: function that returns weights of hypothetical outcomes
+      ts: test statistic, shape (n_outcomes, n_hypotheses)
+      hypotheses: hypotheses, shape (n_hypotheses,)
+      weight_function: function that returns weights of hypothetical outcomes
         given an actually observed outcome. Called as:
-        weight_function(hypotheses, *outcomes, *observed_outcome, **parameters)
-      - outcomes: one or more (n_outcomes,) arrays of possible outcomes.
-            E.g. (n, m) arrays for a two-bin experiment.
-      - progress: whether to show a progress bar
-      - parameters: additional parameters to pass to weight_function
+        ``weight_function(hypotheses, *outcomes, *observed_outcome, **parameters)``
+      outcomes: one or more (n_outcomes,) arrays of possible outcomes.
+           E.g. (n, m) arrays for a two-bin experiment.
+      progress: whether to show a progress bar
+      parameters: additional parameters to pass to weight_function
     """
     # Find the sort order of outcomes by test statistic, for each hypothesis.
     # (Should do this now rather than in the loop over outcomes below!)
@@ -279,7 +287,7 @@ def cls_pvals(ts, toy_weight, neyman_ps=None):
     return neyman_ps / ps_0
 
 
-# Higher level API, combining the above functions
+# Shortcut API that combines the above functions
 @export
 def ts_and_pvals(
         lnl, 
@@ -293,9 +301,9 @@ def ts_and_pvals(
     Parameters
     ----------
     lnl : array
-        Likelihood ratio, shape (|trials|, |n_hypotheses|)
+        Likelihood ratio, shape (n_trials, n_hypotheses)
     toy_weight : array
-        (Hypothesis-dependent) weight of each toy, shape (|trials|, |n_hyp|)
+        (Hypothesis-dependent) weight of each toy, shape (trials, n_hyp)
     interpolate_bestfit : bool
         If True, use interpolation to estimate the best-fit hypothesis more
         precisely.
@@ -310,7 +318,7 @@ def ts_and_pvals(
         of the same shape as lnl.
     """
     # Compute statistics
-    ts = test_statistic(lnl, statistic, interpolate_bestfit=interpolate_bestfit)
+    ts = test_statistics(lnl, statistic, interpolate_bestfit=interpolate_bestfit)
 
     # Convert stats to p-values
     if asymptotic:
@@ -333,21 +341,21 @@ def single_ts_and_pvals(
         asymptotic=False):
     """Compute test statistic and p-value for a single outcome's likelihood
 
-    Returns: (ts, ps), arrays of test statistics and p-values, 
-        shape is (|n_hypotheses|).
+    Returns a tuple (ts, ps), where ts is an (n_hypotheses,) array of test
+        statistic values at the hypotheses, and ps the same array of p-values.
     
     Arguments:
-     - lnl_obs: (|n_hyps|,) array of log likelihoods for one trial
-     - ts: (|n_toys|, |n_hyps|,) array of toy test statistics
-     - ps: (|n_toys|, |n_hyps|,) array of toy p-values
-     - asymptotic: If True, use asymptotic distribution of the test statistic
-     - asymptotic_cls: If True, CLs asymptotics are used if asymptotic=True
+      lnl_obs: (n_hypotheses,) array of log likelihoods for one trial
+      ts: (n_toys, n_hypotheses,) array of toy test statistics
+      ps: (n_toys, n_hypotheses,) array of toy p-values
+      asymptotic: If True, use asymptotic distribution of the test statistic
+      asymptotic_cls: If True, CLs asymptotics are used if asymptotic=True.
         (Argument is not called 'cls' to avoid people feeding in Neyman p-values
-         and thinking setting this gets them Cls results.)
+        and thinking setting this gets them Cls results.)
     """
     # Compute test statistic
     # shape: (1, |n_hypotheses|)
-    t_obs = test_statistic(
+    t_obs = test_statistics(
         lnl_obs[None,:], 
         statistic=statistic, 
         interpolate_bestfit=interpolate_bestfit)

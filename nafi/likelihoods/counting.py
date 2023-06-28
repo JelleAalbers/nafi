@@ -1,11 +1,5 @@
 """Methods for producing likelihood ratios for a counting experiment
 with background.
-
-End goal is an (n_sig, BATCH, hypothesis_i) tensor of likelihood ratios,
-where 
- - n_sig is the number of generated signal events
- - BATCH is a batch dimension
- - hypothesis_i indexes the hypothesis (signal rate)
 """
 from functools import partial
 

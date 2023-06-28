@@ -36,7 +36,7 @@ setuptools.setup(
         'docs': ['sphinx',
                  'sphinx_rtd_theme',
                  'nbsphinx',
-                 'recommonmark'],
+                 'myst-parser'],
         'strict-deps': requirements_strict,
     },
     long_description=readme + '\n\n' + history,

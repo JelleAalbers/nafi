@@ -1,12 +1,12 @@
-"""The on-off problem
-
-A two-bin counting experiment where the second bin ('ancilla') has no signal,
+"""A two-bin counting experiment where the second bin ('ancilla') has no signal,
 but a multiple tau times the background in the first bin.
 
-n events are observed in the main experiment, m in the ancilla.
+The background rate is a nuisance parameter that is profiled over.
 
-The main experiment has signal mu_sig and background mu_bg,
-the ancilla only has background mu_bg * tau
+Notation:
+  * ``n`` events are observed in the main experiment, ``m`` in the ancilla
+  * The main experiment has signal ``mu_sig`` and background ``mu_bg``
+  * The ancilla only has background ``mu_bg * tau``
 """
 import jax
 from . import twobin
@@ -35,13 +35,14 @@ def profile_weights(mu_sig_hyp, n, m, n_obs, m_obs, *, tau):
     """Return (n_outcomes, n_hyp) weights of outcomes using the 
     profile construction for the observed outcome n_obs, m_obs.
 
-    That is, the weights are that for toy data with mu_bg set to 
-    the conditional best-fit value to the observed data for each hypothesis.
+    That is, the weights correspond to generating toy dataset with different
+    mu_bg for each hypothesis, specifically, mu_bg set to the conditional 
+    best-fit value to the observed data for each hypothesis.
     """
     # Get conditional best-fit background, (hypotheses,) array
     b_doublehat = conditional_bestfit_bg(
         mu_sig_hyp, n_obs, m_obs, tau=tau)
-    # Return weights from assuming these backgrounds are true
+    # Return weights if these background rates were true
     return _weights(
         mu_sig_hyp[None,:],
         n[:,None],

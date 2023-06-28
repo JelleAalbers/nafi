@@ -1,21 +1,16 @@
-# Assemble the package. 
-# Import * is used, but submodules use the exporter to define __all__
+import importlib
 
 __version__ = '0.0.0'
+__all__ = []
 
-from . import utils
-from .utils import *
 
-from . import likelihoods
+submodules = ['utils', 'frequentist', 'bayes', 'interval_finding', 'performance']
 
-from . import frequentist
-from .frequentist import *
-
-from . import bayes
-from .bayes import *
-
-from . import intervals
-from .intervals import *
-
-from . import performance
-from .performance import *
+for submodule in submodules:
+    # Import submodule
+    submod = importlib.import_module(f'.{submodule}', package=__name__)
+    # Import everything from __all__ in from submodule
+    for x in submod.__all__:
+        globals()[x] = getattr(submod, x)
+    # Add everything from submodule to __all__
+    __all__ += submod.__all__

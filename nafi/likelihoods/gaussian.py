@@ -16,18 +16,21 @@ def lnl_and_weights(mu_hyp, n_x=1000, x_transform=_logit, return_outcomes=False)
     """Return (logl, toy weight) for a Gaussian measurement
     of a parameter mu constrained to >= 0.
 
-    That is, the true value is at mu_hyp >= 0, and the experiment observes
-        x = Norm(mu_hyp, 1)
+    That is, the true value is at mu >= 0, and the experiment observes
+    a single value X:
+
+    .. math::
+        X \sim \mathrm{Norm}(\mu, 1)
     
-    Both results are (n_outcomes, hypotheses) arrays:
-        lnl contains the log likelihood at each hypothesis,
-        toy_weight contains P(outcome | hypotheses), normalized over outcomes
+    Both results are (n_outcomes, hypotheses) arrays.
+        ``lnl`` contains the log likelihood at each hypothesis,
+        and ``toy_weight`` contains P(outcome | hypotheses), normalized over outcomes.
 
     Arguments:
         mu_hyp: Array with hypotheses
         n_x: Number of x outcomes to consider
         x_transform: Function to transform a uniform 0-1 grid (minus endpoints)
-            to x - values to integrate over. Defaults to logit.
+            to x-values to consider as possible oucomes. Defaults to logit.
     """
     # Possible observations x and their weights compared to uniform
     # (n_outcomes,)

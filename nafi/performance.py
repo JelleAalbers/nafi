@@ -11,13 +11,17 @@ SIGMAS = jnp.array([-2, -1, 0, 1, 2])
 @export
 @jax.jit
 def outcome_probabilities(ll, ul, toy_weight, hypotheses):
-    """Returns dict with probabilities (n_hypotheses arrays) of:
-        - mistake: false exclusion of the hypotheses when it is true
-        - mistake_ul: same, counting only exclusions by the upper limit
-        - empty: empty confidence interval
-        - discovery: exclusion of hypothesis 0, and interval not empty
-        - bg_exclusion: exclusion of hypothesis, when hypothesis 0 is true
-        - bg_exclusion_ul: same, counting only exclusions by the upper limit
+    """Returns probabilities that confidence intervals satisfy some 
+    properties.
+
+    Dictionary keys are as follows, with values (n_hypotheses,) arrays:
+    -  ``mistake``: false exclusion of the hypotheses when it is true
+    -  ``mistake_ul``: same, considering only exclusions by the upper limit
+    -  ``empty``: empty confidence interval
+    -  ``discovery``: exclusion of hypothesis 0, and interval not empty
+    -  ``bg_exclusion``: this hypothesis excluded when hypothesis 0 is true
+    -  ``bg_exclusion_ul``: same, counting only exclusions by the upper limit
+
     """
     empty_interval = jnp.isnan(ul) & jnp.isnan(ll)
 
@@ -71,11 +75,11 @@ def brazil_band(limits, toy_weight, return_array=False):
     (the 15.8th percentile).
 
     Arguments:
-     - limits: Upper (or lower) limits, shape (n_trials,)
-     - toy_weight: weights of the toys, shape (n_trials, n_hypotheses)
-     - return_array: if False, instead returns a (n_hyp, 5) array,
-       with the second axis running over levels (index 0 = -2σ, 1 = -1σ, etc)
-     - progress: whether to show a progress bar
+      limits: Upper (or lower) limits, shape (n_trials,)
+      toy_weight: weights of the toys, shape (n_trials, n_hypotheses)
+      return_array: if False, instead returns a (n_hyp, 5) array,
+        with the second axis running over levels (index 0 = -2σ, 1 = -1σ, etc)
+      progress: whether to show a progress bar
     """
     sensi = _brazil_band(limits, toy_weight, SIGMAS)
     if return_array:
@@ -114,12 +118,12 @@ def credibility(posterior_cdf, hypotheses, ll, ul):
     representatives from an underlying continuous parameter that is of interest.
 
     Arguments:
-     - posterior_cdf: posterior, shape (n_outcomes, n_hypotheses,)
+      posterior_cdf: posterior, shape (n_outcomes, n_hypotheses,)
         See nafi.posterior_cdf, don't just cumsum your posterior if you care 
         about off-by-half errors.
-     - hypotheses: hypotheses, shape (n_hypotheses,)
-     - ll: lower limits, shape (n_outcomes,). If omitted, uses hypotheses[0].
-     - ul: upper limits, shape (n_outcomes,). If omitted, uses hypotheses[-1].
+      hypotheses: hypotheses, shape (n_hypotheses,)
+      ll: lower limits, shape (n_outcomes,). If omitted, uses hypotheses[0].
+      ul: upper limits, shape (n_outcomes,). If omitted, uses hypotheses[-1].
     """
     # P(truth <= h) = P(truth < h), see posterior_cdf
     hyp_to_p = jax.vmap(jnp.interp, in_axes=(0, None, 0))

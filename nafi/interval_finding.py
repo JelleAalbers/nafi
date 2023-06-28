@@ -12,7 +12,7 @@ export, __all__ = nafi.exporter()
 @partial(jax.jit, static_argnames=('interpolate',))
 def intervals(
         ps, hypotheses, interpolate=True, cl=0.9):
-    """Convert p-values to confidence intervals
+    """Set confidence intervals on hypotheses based on p-values.
 
     Args:
         ps: p-values, array of shape (n_trials, n_hypotheses) or (n_hypotheses,)

@@ -65,9 +65,9 @@ def outcomes(n_max, m_max, ravel=True):
     experimental outcomes of a two-bin experiment.
 
     Arguments:
-        - n_max: Maximum number of events in first bin to consider
-        - m_max: Maximum number of events in second bin to consider
-        - ravel: If False (default is true), instead return two 
+      n_max: Maximum number of events in first bin to consider
+      m_max: Maximum number of events in second bin to consider
+      ravel: If False (default is true), instead return two 
             (n_max + 1, m_max + 1) 2d arrays.
     """
     # Outcomes defined by n (obs in main) and m (obs in anc)
