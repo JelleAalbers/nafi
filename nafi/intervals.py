@@ -64,7 +64,7 @@ def intervals(
         ul = jnp.where(
             ul_i == len(hypotheses) - 1,
             ul,
-            _itp(alpha, ps, hypotheses, i))
+            nafi.find_root_vec(x=hypotheses, y=ps, y0=alpha, i=i))
 
         # Same for lower limit
         i = ll_i[:,None] + jnp.array([-1,0,1])[None,:]
@@ -72,7 +72,7 @@ def intervals(
         ll = jnp.where(
             ll_i == 0,
             ll,
-            _itp(alpha, ps, hypotheses, i))
+            nafi.find_root_vec(x=hypotheses, y=ps, y0=alpha, i=i))
 
     # Set empty intervals to NaN
     ul = jnp.where(empty_interval, jnp.nan, ul)
@@ -83,13 +83,3 @@ def intervals(
         ll = ll[0]
 
     return ll, ul
-
-
-def _itp(alpha, ps, hypotheses, i):
-    """Return interpolated hypothesis[i] where ps[:,i] == alpha"""
-    i = jnp.clip(i, 0, len(hypotheses) - 1)
-    return jax.vmap(jnp.interp, in_axes=(None, 0, 0))(
-        alpha,                      # x
-        jax.vmap(jnp.take)(ps, i),  # xp
-        hypotheses[i]               # fp
-    )

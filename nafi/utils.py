@@ -105,6 +105,29 @@ def _order_and_index_1d(x):
 
 
 @export
+@jax.jit
+def find_root_vec(y0, y, x, i):
+    """Return array of interpolated x[i] where y[:,i] == y0
+    
+    If y is (a, b), x should be (b,), and the result will be (a,).
+    i is an integer array (a, c) with indices into the (b) dimension.
+
+        This is useful with e.g. c = 2 or 3 to select a neighbourhood around the 
+        root.
+
+    y[:,c] _must_ be increasing in the second dimension! This is a limitation
+    we inherit from jnp.interp.
+    """
+    i = jnp.clip(i, 0, len(x) - 1)
+    return jax.vmap(jnp.interp, in_axes=(None, 0, 0))(
+        y0,                        # x
+        jax.vmap(jnp.take)(y, i),  # xp
+        x[i]                       # fp
+    )
+
+
+
+@export
 def tqdm_maybe(progress=False):
     # The unused **kwargs is relevant, it ignores other arguments tqdm takes
     # (like total and desc)

@@ -26,17 +26,20 @@ def test_poisson_limit():
 
 
 def test_maximum_likelihood():
+    # Test we find the exact maximum likelihood if the likelihood
+    # is parabolic (linear gradient)
 
     # Some random parabola; maximum is x= -2.5, y = 5.5
     def f(x):
         return - (0.4 * x**2 + 2 * x - 3)
     
     # Evaluate it only on a grid
-    x = np.arange(-4, 4)
-    y = f(x)
+    for delta in [0, 0.123, -0.123]:
+        x = np.arange(-6, 6) + delta
+        y = f(x)
 
-    # Test parabolic interpolation is exact 
-    assert np.allclose(
-        nafi.maximum_likelihood(y[None,:], interpolate=True)[0], 
-        5.5)
+        # Test parabolic interpolation is exact 
+        assert np.allclose(
+            nafi.maximum_likelihood(y[None,:], interpolate=True)[0], 
+            5.5)
 

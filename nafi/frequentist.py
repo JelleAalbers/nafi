@@ -11,18 +11,8 @@ import nafi
 export, __all__ = nafi.exporter()
 
 DEFAULT_TEST_STATISTIC = 't'
-DEFAULT_INTERPOLATE_BESTFIT = False
+DEFAULT_INTERPOLATE_BESTFIT = True
 DEFAULT_CLS = False
-
-
-@jax.jit
-def _parabola_vertex(x1, y1, x2, y2, x3, y3):
-    # From https://stackoverflow.com/questions/717762
-    denom = (x1 - x2) * (x1 - x3) * (x2 - x3)
-    A     = (x3 * (y2 - y1) + x2 * (y1 - y3) + x1 * (y3 - y2))
-    B     = (x3**2 * (y1 - y2) + x2**2 * (y3 - y1) + x1**2 * (y2 - y3))
-    C     = (x2 * x3 * (x2 - x3) * y1 + x3 * x1 * (x3 - x1) * y2 + x1 * x2 * (x1 - x2) * y3)
-    return -B / (2*A), (C - B*B / (4*A))/denom
 
 
 @export
@@ -33,50 +23,36 @@ def maximum_likelihood(lnl, interpolate=DEFAULT_INTERPOLATE_BESTFIT):
     Returns two (|trials|, |n_sig|) arrays: the bestfit likelihood ratio and
     index of best-fit hypothesis.
 
-    If interpolate=True, bestfit likelihood is interpolated parabolically
-        when it is not at the edge of the likelihood curve.
-        The index will be a float in this case.
+    If interpolate=True, the bestfit log likelihood is interpolated 
+        ~parabolically when not at the edge of the likelihood curve.
+        The returned index is unchanged.
     """
     n_outcomes, n_hyp = lnl.shape
     i = jnp.argmax(lnl, axis=-1)
-    y = lnl[jnp.arange(n_outcomes), i]
+    outcomes_is = jnp.arange(n_outcomes)
+    y = lnl[outcomes_is, i]
 
     if not interpolate:
         return y, i
     
-    # TODO: interpolating the best fit has a bug!
-    # Need unit tests for this..
+    # Estimate where the likelihood curve has zero gradient near its maximum
+    _i_nearby = i[:,None] + jnp.array([-1, 0, 1])[None,:]
+    lnl_grad = jnp.gradient(lnl, axis=-1)
+    hyps_i = np.arange(n_hyp)
+    # find_root_vec expects increasing y, but the gradient is decreasing
+    # near the maximum -> use the negative gradient
+    i_itp = nafi.find_root_vec(x=hyps_i, y=-lnl_grad, y0=0, i=_i_nearby)
+    i_int, i_mod = jnp.floor(i_itp).astype(int), i_itp % 1
+    y_itp = (
+        lnl[outcomes_is,i_int] 
+        # Note 0.5 from d[a x^2]/dx = 2 a x
+        + 0.5 * i_mod * lnl_grad[outcomes_is, i_int])
 
-    # Jax auto-clamps indices, so this won't crash
-    y_prev = lnl[jnp.arange(n_outcomes), i - 1]
-    y_next = lnl[jnp.arange(n_outcomes), i + 1]
-    # jax.debug.print(
-    #     "i-1 = {0}\ny_prev = {1}\ni = {2}\ny = {3}\ni+1 = {4}\ny_next = {5}",
-    #     i[14:19] - 1, 
-    #     y_prev[14:19],
-    #     i[14:19], 
-    #     y[14:19], 
-    #     i[14:19] + 1, 
-    #     y_next[14:19])
-    i_itp, y_itp = _parabola_vertex(i - 1, y_prev, i, y, i + 1, y_next)
-    # Return interpolated solution only if all the following hold:
-    #   * The original i was not at the edge of the likelihood curve
-    #     (in which case points left or right of it are missing)
-    #   * i_itp is within [i-1, i+1], i.e. we are not extrapolating
-    #   * y_itp is higher than y (it improves the fit)
-    #   * y_prev and y_next are both lower than y by a reasonable amount
-    #     to exclude numerical errors (since we usually use float32)
-    # The last two shouldn't really be necessary if the interpolation is
-    # working correctly, but I don't know what kinds of mad likelihoods
-    # people will throw at this...
-    allow_itp = (
-        (i > 0) & (i < n_hyp - 1)
-        & (jnp.abs(i_itp - i) <= 1)
-        & (y_itp > y)
-        & (jnp.minimum(y_prev, y_next) < 0.9 * (y_itp - 1e-1))
-        )
+    # Return interpolation only if the original i was not at the edge of the
+    # likelihood curve (in which case points left or right of it are missing)
+    allow_itp = (i > 0) & (i < n_hyp - 1)
     y = jnp.where(allow_itp, y_itp, y)
-    i = jnp.where(allow_itp, i_itp, i)
+
     return y, i
 
 
