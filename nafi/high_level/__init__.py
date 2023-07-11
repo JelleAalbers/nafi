@@ -1,10 +1,7 @@
 import importlib
 
-__version__ = '0.0.0'
 __all__ = []
-
-
-submodules = ['utils', 'frequentist', 'bayes', 'interval_finding', 'performance']
+submodules = ['experiments', 'methods', 'plots']
 
 for submodule in submodules:
     # Import submodule
@@ -14,6 +11,3 @@ for submodule in submodules:
         globals()[x] = getattr(submod, x)
     # Add everything from submodule to __all__
     __all__ += submod.__all__
-
-from . import likelihoods
-from . import high_level

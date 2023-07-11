@@ -1,5 +1,6 @@
-from functools import partial
+import typing
 
+import numpy as np
 import jax
 import jax.numpy as jnp
 from scipy import stats
@@ -22,6 +23,10 @@ def exporter(export_self=False):
 
 
 export, __all__ = exporter(export_self=True)
+
+
+jax_or_np_array = typing.Union[np.ndarray, jnp.ndarray]
+__all__ += ['jax_or_np_array']
 
 
 @export
