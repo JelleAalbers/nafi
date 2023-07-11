@@ -1,3 +1,7 @@
+"""TODO: this still needs work. See ``twobin`` for a more complete profile
+likelihood example.
+"""
+
 import jax
 import jax.numpy as jnp
 
@@ -19,14 +23,19 @@ def conditional_bestfit_bg(n, mu_sig, mu_bg_estimate, sigma_bg):
 
 @export
 def lnl_and_weights(mu_sig_hyp, mu_bg_true, mu_bg_model, sigma_bg, n_max=None):
-    """Return (logl, toy weight) for a counting experiment with a background
-        that has a Gaussian absolute theoretical uncertainty on mu_bg of
-        sigma_bg.
+    """Return (logl, toy_weight) for a counting experiment with a background
+    that has a Gaussian absolute theoretical uncertainty on mu_bg of
+    sigma_bg. 
+    
+    Here `lnl` and `toy_weight` are both (n_outcomes, hypotheses) arrays,
+        where lnl contains the log likelihood at each hypothesis
+        with the background rate profiled out,
+        and toy_weight contains P(outcome | hypotheses), normalized over 
+        outcomes.
 
-    Both are (n_outcomes, hypotheses) arrays:
-        lnl contains the log likelihood at each hypothesis,
-        toy_weight contains P(outcome | hypotheses), normalized over outcomes
-
+    Since the background cannot be negative, this model can be ill-defined.
+    Consider using ``nafi.likelihoods.onoff`` instead.
+    
     Arguments:
         mu_sig_hyp: Array with signal rate hypotheses
         mu_bg_true: True background rate to assume for toy data,
