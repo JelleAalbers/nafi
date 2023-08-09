@@ -1,3 +1,4 @@
+from copy import copy
 import dataclasses
 import typing
 
@@ -23,6 +24,9 @@ class Experiment:
     weights: nafi.jax_or_np_array
     hypotheses: nafi.jax_or_np_array
 
+    cl: float = 0.9
+    singular_is_empty: bool = False
+
     # Useful for plotting, e.g. coverage plots
     name: str = ""
     hypothesis_label: str = ""
@@ -47,10 +51,22 @@ class Experiment:
         # TODO: can be done easier, don't need to compute q0 for all hyps...
         _, p0 = nafi.ts_and_pvals(self.lnl, self.weights, statistic='q0')
         self.p0 = 1 - p0[:,0]
+        self.clear_cache()
+
+    def clear_cache(self):
+        """Clear cached results and limits."""
         self._limits = dict()
         self._results = dict()
 
+    def clear_copy(self):
+        """Return a copy of the experiment with cleared cache."""
+        self_copy = copy(self)
+        self_copy.clear_cache()
+        return self_copy
+
     def is_discovery(self, min_sigma):
+        """Return a bool (n_outcomes,) array indicating whether the outcome
+        is a discovery at the given significance level."""
         return self.p0 < stats.norm.cdf(-min_sigma)
 
     def evaluate_intervals(self, ll, ul):
@@ -58,7 +74,8 @@ class Experiment:
             p_outcome = nafi.outcome_probabilities(
                 ll, ul, 
                 toy_weight=self.weights, 
-                hypotheses=self.hypotheses),
+                hypotheses=self.hypotheses,
+                singular_is_empty=self.singular_is_empty),
             credibility = nafi.credibility(
                 self.posterior_cdf, 
                 self.hypotheses,

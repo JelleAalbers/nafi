@@ -89,16 +89,19 @@ def test_statistics(
     lnl_best, best_i = maximum_likelihood(lnl, interpolate=interpolate_bestfit)
 
     # Compute statistics (|n_trials|,|n_hyps|)
-    if statistic in ('t', 'q', 'signedt', 'signedtroot'):
+    if statistic in ('t', 'q', 'signedt', 'signedtroot', 'minus_signedt'):
         ts = -2 * (lnl - lnl_best[...,None])
-        if statistic in ('q', 'signedt', 'signedtroot'):
+        if statistic in ('q', 'signedt', 'signedtroot', 'minus_signedt'):
             is_excess = jnp.arange(n_hyp)[None,:] <= best_i[...,None]
             if statistic == 'q':
                 ts = jnp.where(is_excess, 0, ts)
             else:
+                # signedt and variations
                 ts = jnp.where(is_excess, -ts, ts)
                 if statistic == 'signedtroot':
                     ts = jnp.sqrt(ts)
+                elif statistic == 'minus_signedt':
+                    ts = -ts
     elif statistic == 'q0':
         # L(best)/L(0). Note this does not depend on the hypothesis.
         # Assuming hypothesis 0 is background only!
