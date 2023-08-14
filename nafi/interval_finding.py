@@ -7,18 +7,22 @@ import jax.numpy as jnp
 
 export, __all__ = nafi.exporter()
 
+DEFAULT_CL = 0.9
+
 
 @export
 @partial(jax.jit, static_argnames=('interpolate',))
 def intervals(
-        ps, hypotheses, interpolate=True, cl=0.9):
+        ps, hypotheses, interpolate=True, cl=DEFAULT_CL,):
     """Set confidence intervals on hypotheses based on p-values.
 
     Args:
         ps: p-values, array of shape (n_trials, n_hypotheses) or (n_hypotheses,)
         hypotheses: array of hypotheses, shape (n_hypotheses,)
-        interpolate (bool): if True, use interpolation to estimate the intervals
-            more precisely.
+        interpolate (bool): if True (default), use interpolation to estimate the intervals
+            more precisely. If a limit is at the edge of the provided hypotheses,
+            it is still not interpolated, to ensure we properly retrieve
+            single-point intervals.
         cl (float): confidence level
 
     Returns:
@@ -50,11 +54,13 @@ def intervals(
             jnp.asarray(hypotheses)[None,:],
             jnp.inf),
         axis=-1)
-    
+
     ul = hypotheses[ul_i]
     ll = hypotheses[ll_i]
 
     # Interpolate / fine-tune limits
+    # Limits at the edge of the hypotheses range are not interpolated,
+    # so we properly get single-point intervals.
     if interpolate:
         # i = indices of size-2 slice of values to interpolate.
         # Note we use [1,0] instead of [0,1]: the ps are decreasing w hypotheses,
@@ -62,7 +68,7 @@ def intervals(
         # but jnp.interp expects increasing x.
         i = ul_i[:,None] + jnp.array([1,0])[None,:]
         ul = jnp.where(
-            ul_i == len(hypotheses) - 1,
+            (ul_i == len(hypotheses) - 1) | (ul_i == 0),
             ul,
             nafi.find_root_vec(x=hypotheses, y=ps, y0=alpha, i=i))
 
@@ -70,7 +76,7 @@ def intervals(
         i = ll_i[:,None] + jnp.array([-1,0,1])[None,:]
         i = jnp.clip(i, 0, len(hypotheses) - 1)
         ll = jnp.where(
-            ll_i == 0,
+            (ll_i == len(hypotheses) - 1) | (ll_i == 0),
             ll,
             nafi.find_root_vec(x=hypotheses, y=ps, y0=alpha, i=i))
 
