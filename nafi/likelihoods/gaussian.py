@@ -21,7 +21,7 @@ def lnl_and_weights(mu_hyp, n_x=1000, x_transform=_logit, return_outcomes=False)
 
     .. math::
         X \sim \mathrm{Norm}(\mu, 1)
-    
+
     Both results are (n_outcomes, hypotheses) arrays.
         ``lnl`` contains the log likelihood at each hypothesis,
         and ``toy_weight`` contains P(outcome | hypotheses), normalized over outcomes.
@@ -44,6 +44,7 @@ def lnl_and_weights(mu_hyp, n_x=1000, x_transform=_logit, return_outcomes=False)
 
     # Probability of outcome, given hypothesis
     # (n_outcomes, n_hyp)
+    # Note nafi.lnl_to_weights would not account for the outcome weights dx
     p_x = jnp.exp(lnl) * dx
     toy_weight = p_x / p_x.sum(axis=0)
 

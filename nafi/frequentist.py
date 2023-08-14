@@ -19,15 +19,15 @@ DEFAULT_CLS = False
 @partial(jax.jit, static_argnames=('interpolate',))
 def maximum_likelihood(lnl, interpolate=DEFAULT_INTERPOLATE_BESTFIT):
     """Return maximum likelihood, and index of best-fit hypothesis
-    
+
     Returns a tuple (y, i) of (n_trials, n_hypothesis) arrays, where y is the
         bestfit likelihood ratio and i the index of best-fit hypothesis.
 
     Arguments:
         lnl: (n_trials, n_hypotheses) array of log likelihoods
-        interpolate: If True (default), the bestfit log likelihood is 
-            interpolated parabolically when not at the edge of the likelihood 
-            curve. The returned index i remains an interger.
+        interpolate: If True (default), the bestfit log likelihood is
+            interpolated parabolically when not at the edge of the likelihood
+            curve. The returned index i remains an integer.
     """
     n_outcomes, n_hyp = lnl.shape
     i = jnp.argmax(lnl, axis=-1)
@@ -36,7 +36,7 @@ def maximum_likelihood(lnl, interpolate=DEFAULT_INTERPOLATE_BESTFIT):
 
     if not interpolate:
         return y, i
-    
+
     # Estimate where the likelihood curve has zero gradient near its maximum
     _i_nearby = i[:,None] + jnp.array([-1, 0, 1])[None,:]
     lnl_grad = jnp.gradient(lnl, axis=-1)
@@ -46,7 +46,7 @@ def maximum_likelihood(lnl, interpolate=DEFAULT_INTERPOLATE_BESTFIT):
     i_itp = nafi.find_root_vec(x=hyps_i, y=-lnl_grad, y0=0, i=_i_nearby)
     i_int, i_mod = jnp.floor(i_itp).astype(int), i_itp % 1
     y_itp = (
-        lnl[outcomes_is,i_int] 
+        lnl[outcomes_is,i_int]
         # Note 0.5 from d[a x^2]/dx = 2 a x
         + 0.5 * i_mod * lnl_grad[outcomes_is, i_int])
 
@@ -61,15 +61,15 @@ def maximum_likelihood(lnl, interpolate=DEFAULT_INTERPOLATE_BESTFIT):
 @export
 @partial(jax.jit, static_argnames=('statistic', 'interpolate_bestfit'))
 def test_statistics(
-        lnl, 
-        statistic=DEFAULT_TEST_STATISTIC, 
+        lnl,
+        statistic=DEFAULT_TEST_STATISTIC,
         interpolate_bestfit=DEFAULT_INTERPOLATE_BESTFIT):
     """Return test statistic computed from likelihood curves.
 
     The following statistics are supported:
-    
+
       - ``t``: ``-2ln[ L(hypothesis)/L(bestfit) ]``
-      - ``q``: as t, but zero if hypothesis <= bestfit (data is an excess), 
+      - ``q``: as t, but zero if hypothesis <= bestfit (data is an excess),
       - ``q0``: ``-2ln[ L(bestfit)/L(0) ]``, where '0' is the first hypothesis
       - ``lep``: ``-2ln[ L(hypothesis)/L(0) ]``
       - ``signedt``: as t, but -t if hypothesis <= bestfit (data is an excess)
@@ -78,7 +78,7 @@ def test_statistics(
     Arguments:
         lnl: (n_trials, n_hypotheses) array of log likelihoods
         statistic: name of the test statistic to use.
-        interpolate_bestfit: If True, use interpolation to estimate 
+        interpolate_bestfit: If True, use interpolation to estimate
             the best-fit hypothesis more precisely.
 
     Returns:
@@ -118,13 +118,13 @@ def test_statistics(
 @export
 @partial(jax.jit, static_argnames=('statistic', 'cls'))
 def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
-    """Compute asymptotic frequentist right-tailed p-value for 
+    """Compute asymptotic frequentist right-tailed p-value for
     test statistics ts.
-    
+
     Arguments:
         ts: array of test statistics
         statistic: test statistic used; only 't' or 'q' implemented currently.
-        cls: If True, use asymptotic formulae appropriate for the CLs method 
+        cls: If True, use asymptotic formulae appropriate for the CLs method
             instead of those for a frequentist/Neyman construction.
             (Currently this just raises NotImplementedError.)
     """
@@ -150,25 +150,25 @@ def asymptotic_pvals(ts, statistic=DEFAULT_TEST_STATISTIC, cls=DEFAULT_CLS):
 
 @export
 @partial(jax.jit, static_argnames=('freeze_truth_index'))
-def neyman_pvals(ts, toy_weight, freeze_truth_index=None):
-    """Compute right-tailed p-values from test statistics ts using a 
+def neyman_pvals(ts, weights, freeze_truth_index=None):
+    """Compute right-tailed p-values from test statistics ts using a
     Neyman construction.
-    
+
     Arguments:
         ts: array of test statistics, shape (n_trials, n_hypotheses)
-        toy_weight: array of toy outcome weights, same shape
-        freeze_truth_index: If set, freezes the toy weights to the given 
+        weights: array of normalized P(outcome|hypothesis), same shape.
+        freeze_truth_index: If set, freezes the toy weights to the given
             hypothesis index. Useful for CLs.
 
     """
     return neyman_pvals_from_ordering(
-        *nafi.order_and_index(ts), toy_weight, 
+        *nafi.order_and_index(ts), weights,
         freeze_truth_index=freeze_truth_index)
 
 
 @partial(jax.jit, static_argnames=('freeze_truth_index'))
 def neyman_pvals_from_ordering(
-        order, sort_index, toy_weight, 
+        order, sort_index, weights,
         freeze_truth_index=None):
     """Return right-tailed p-values of outcomes given an hypothesis-dependent
     ordering of outcomes.
@@ -176,36 +176,36 @@ def neyman_pvals_from_ordering(
     Arguments:
         order, sort_index: ordering of outcomes, from nafi.order_and_index.
             Both are (n_outcomes, n_hypotheses) arrays.
-        toy_weight: array of toy outcome weights, same shape.
-        freeze_truth_index: If set, freezes the toy weights to the given 
+        weights: array of normalized P(outcome|hypothesis), same shape.
+        freeze_truth_index: If set, freezes the toy weights to the given
             hypothesis index. Useful for CLs.
     """
-    # For some reason, vmap over in_axis=0 is much faster than in_axis=1 and 
+    # For some reason, vmap over in_axis=0 is much faster than in_axis=1 and
     # transposing the inputs... hm....
     if freeze_truth_index is not None:
         # Always evaluate with _one_ true hypothesis
-        toy_weight = toy_weight[:,freeze_truth_index]
+        weights = weights[:,freeze_truth_index]
         in_axes = (0, 0, None)
     else:
         # Compute weighted_ps independently for each hypothesis
         in_axes = (0, 0, 0)
-        toy_weight = toy_weight.T
+        weights = weights.T
     return jax.vmap(nafi.utils._weighted_ps_presorted, in_axes=in_axes)(
-        order.T, sort_index.T, toy_weight).T
+        order.T, sort_index.T, weights).T
 
 
 # TODO: could we sensibly jit this even though it has a for loop?
 @export
 def neyman_pvals_weighted(
-        ts, hypotheses, weight_function, 
-        *outcomes, 
-        progress=True, freeze_truth_index=None, 
+        ts, hypotheses, weight_function,
+        *outcomes,
+        progress=True, freeze_truth_index=None,
         **parameters):
-    """Compute right-tailed p-values from test statistics ts using a 
+    """Compute right-tailed p-values from test statistics ts using a
     Neyman construction, where hypothetical outcomes are weighted by a
-    function of the observed outcome. 
+    function of the observed outcome.
     This is used for the profile construction.
-    
+
     Arguments:
       ts: test statistic, shape (n_outcomes, n_hypotheses)
       hypotheses: hypotheses, shape (n_hypotheses,)
@@ -228,10 +228,10 @@ def neyman_pvals_weighted(
     return np.stack([
         _profile_p_given_obs(
             weight_function,
-            order, sort_index, 
-            hypotheses, 
-            *outcomes, 
-            outcome_i=i, 
+            order, sort_index,
+            hypotheses,
+            *outcomes,
+            outcome_i=i,
             freeze_truth_index=freeze_truth_index,
             **parameters)
         for i in nafi.utils.tqdm_maybe(progress)(range(outcomes[0].size))])
@@ -240,19 +240,19 @@ def neyman_pvals_weighted(
 @partial(jax.jit, static_argnames=('weight_function', 'freeze_truth_index',))
 def _profile_p_given_obs(
         weight_function,
-        order, sort_index, 
-        hypotheses, 
-        *outcomes, 
-        outcome_i, 
-        freeze_truth_index, 
+        order, sort_index,
+        hypotheses,
+        *outcomes,
+        outcome_i,
+        freeze_truth_index,
         **parameters):
-    """Return p-value of the outcome with index outcome_i, weighting 
+    """Return p-value of the outcome with index outcome_i, weighting
     hypothetical outcomes with a weight_function that depends on the actually
     observed outcome (as in the profile construction).
     """
     # Weights of all hypothetical outcomes
     weights = weight_function(
-        hypotheses, 
+        hypotheses,
         *outcomes,                           # Possible outcome
         *[r[outcome_i] for r in outcomes],   # Actually observed outcome
         **parameters)
@@ -265,26 +265,32 @@ def _profile_p_given_obs(
 
 
 @export
-def cls_pvals(ts, toy_weight, neyman_ps=None):
-    """Compute p-value ratios used in the CLs method. 
+def cls_pvals(ts, weights, neyman_ps=None):
+    """Compute p-value ratios used in the CLs method.
     First hypothesis must be background-only.
+
+    Arguments:
+        ts: array of test statistics, shape (n_trials, n_hypotheses).
+            High values must mean increasing deficits, not excesses!
+        weights: array of normalized P(outcome|hypothesis), same shape.
+        neyman_ps: if set, use these instead of computing them from ts.
     """
     order, sort_index = nafi.order_and_index(ts)
     if neyman_ps is None:
         neyman_ps = neyman_pvals_from_ordering(
-            order, sort_index, toy_weight)
+            order, sort_index, weights)
     ps_0 = neyman_pvals_from_ordering(
-        order, sort_index, toy_weight, freeze_truth_index=0)
+        order, sort_index, weights, freeze_truth_index=0)
 
     # PDG review and other CLs texts have a 1- in the denominator
-    # because they define "p_b" to be a CDF value (integrate distribution 
+    # because they define "p_b" to be a CDF value (integrate distribution
     # from -inf to the observed value), unlike "p_{s+b}".
     # Our ps are both survival function values (integrate distribution from
     # observed value to +inf)
 
     # This definition assumes the statistics are like q_mu, i.e.
     # decreasing if we add more events. If using a statistic with the opposite
-    # behaviour (as older CLs papers do), we would need left-tailed p-values. 
+    # behaviour (as older CLs papers do), we would need left-tailed p-values.
     # (And left- and right-tailed p-values are not just 1 - complements of each
     #  other, since multiple outcomes may achieve the same test statistic.)
     return neyman_ps / ps_0
@@ -293,33 +299,37 @@ def cls_pvals(ts, toy_weight, neyman_ps=None):
 # Shortcut API that combines the above functions
 @export
 def ts_and_pvals(
-        lnl, 
-        toy_weight, 
-        statistic=DEFAULT_TEST_STATISTIC, 
+        lnl,
+        weights=None,
+        statistic=DEFAULT_TEST_STATISTIC,
         cls=DEFAULT_CLS,
-        interpolate_bestfit=DEFAULT_INTERPOLATE_BESTFIT, 
+        interpolate_bestfit=DEFAULT_INTERPOLATE_BESTFIT,
         asymptotic=False):
     """Compute frequentist test statistics and p-values for likelihood ratios
-    
+
     Parameters
     ----------
     lnl : array
         Likelihood ratio, shape (n_trials, n_hypotheses)
-    toy_weight : array
-        (Hypothesis-dependent) weight of each toy, shape (trials, n_hyp)
+    weights : array
+        array of normalized P(outcome|hypothesis), same shape.
+        If not provided, computed from lnl.
     interpolate_bestfit : bool
         If True, use interpolation to estimate the best-fit hypothesis more
         precisely.
     asymptotic: bool
-        If True, use asymptotic approximation for the test statistic 
+        If True, use asymptotic approximation for the test statistic
         distribution.
     cls: False
         If True, use the CLs method instead of a Neyman construction.
         Hypothesis 0 (the first one) must be the background-only hypothesis.
 
-    Returns: (ts, ps), arrays of test statistics and p-values 
+    Returns: (ts, ps), arrays of test statistics and p-values
         of the same shape as lnl.
     """
+    if weights is None:
+        weights = nafi.lnl_to_weights(lnl)
+
     # Compute statistics
     ts = test_statistics(lnl, statistic, interpolate_bestfit=interpolate_bestfit)
 
@@ -327,18 +337,18 @@ def ts_and_pvals(
     if asymptotic:
         ps = asymptotic_pvals(ts, statistic, cls=cls)
     elif cls:
-        ps = cls_pvals(ts, toy_weight)
+        ps = cls_pvals(ts, weights)
     else:
-        ps = neyman_pvals(ts, toy_weight)
+        ps = neyman_pvals(ts, weights)
     return ts, ps
 
 
 @export
 def single_ts_and_pvals(
-        lnl_obs, 
+        lnl_obs,
         ts=None,
         ps=None,
-        statistic=DEFAULT_TEST_STATISTIC, 
+        statistic=DEFAULT_TEST_STATISTIC,
         interpolate_bestfit=DEFAULT_INTERPOLATE_BESTFIT,
         asymptotic_cls=DEFAULT_CLS,
         asymptotic=False):
@@ -346,7 +356,7 @@ def single_ts_and_pvals(
 
     Returns a tuple (ts, ps), where ts is an (n_hypotheses,) array of test
         statistic values at the hypotheses, and ps the same array of p-values.
-    
+
     Arguments:
       lnl_obs: (n_hypotheses,) array of log likelihoods for one trial
       ts: (n_toys, n_hypotheses,) array of toy test statistics
@@ -359,8 +369,8 @@ def single_ts_and_pvals(
     # Compute test statistic
     # shape: (1, |n_hypotheses|)
     t_obs = test_statistics(
-        lnl_obs[None,:], 
-        statistic=statistic, 
+        lnl_obs[None,:],
+        statistic=statistic,
         interpolate_bestfit=interpolate_bestfit)
     if asymptotic:
         p_obs = asymptotic_pvals(t_obs, statistic=statistic, cls=asymptotic_cls)

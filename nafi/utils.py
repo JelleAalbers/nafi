@@ -31,12 +31,28 @@ __all__ += ['jax_or_np_array']
 
 @export
 @jax.jit
+def lnl_to_weights(lnl):
+    """Compute weights from log likelihoods, assuming normal outcome weighting.
+
+    Arguments:
+        lnl: log likelihoods, (n_outcome, n_hyp) array
+
+    Returns:
+        weights: (n_outcome, n_hyp) array
+    """
+    weights = jnp.exp(lnl)
+    weights /= jnp.sum(weights, axis=0, keepdims=True)
+    return weights
+
+
+@export
+@jax.jit
 def weighted_quantile(values, weights, quantiles):
     """Compute quantiles for weighted values.
 
     Does not interpolate values: instead returns value whose probability mass
     contains the quantile.
-    
+
     :param values: numpy.array with data
     :param weights: array-like of the same length as `values`
     :param quantiles: array-like with many quantiles needed.
@@ -62,7 +78,7 @@ def weighted_quantile_sorted(values, weights, quantiles):
 @jax.jit
 def weighted_ps(x, w):
     """Return probability of getting a value equal or higher than x.
-    
+
     Arguments:
         x: values, 1d array
         w: weights, 1d array
@@ -113,11 +129,11 @@ def _order_and_index_1d(x):
 @jax.jit
 def find_root_vec(y0, y, x, i):
     """Return array of interpolated x[i] where y[:,i] == y0
-    
+
     If y is (a, b), x should be (b,), and the result will be (a,).
     i is an integer array (a, c) with indices into the (b) dimension.
 
-    This is useful with e.g. c = 2 or 3 to select a neighbourhood around the 
+    This is useful with e.g. c = 2 or 3 to select a neighbourhood around the
     root.
 
     y[:,c] _must_ be increasing in the second dimension! This is a limitation
@@ -145,7 +161,7 @@ def large_n_for_mu(mu):
 
 
 @export
-def poisson_ul(n, cl=0.9):    
+def poisson_ul(n, cl=0.9):
     """Return upper limit for a Poisson process with n observed events.
 
     Arguments:

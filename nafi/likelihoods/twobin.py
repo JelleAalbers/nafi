@@ -11,7 +11,7 @@ from jax import numpy as jnp
 import nafi
 
 
-def lnl_and_weights(mu_sig, f_sig_1, mu_bg_1, mu_bg_2, 
+def lnl_and_weights(mu_sig, f_sig_1, mu_bg_1, mu_bg_2,
                     n_max=None, m_max=None, return_outcomes=False):
     """Return (logl, toy weight) for a counting experiment with background.
 
@@ -24,7 +24,7 @@ def lnl_and_weights(mu_sig, f_sig_1, mu_bg_1, mu_bg_2,
         f_sig_1: Fraction of signal events in first bin
         mu_bg_1: Expected background in first bin
         mu_bg_2: Expected background in second bin
-        n_max, m_max: Largest number of events in bin 1 and two to consider. 
+        n_max, m_max: Largest number of events in bin 1 and two to consider.
             If None, will be determined automatically from parameters.
         return_outcomes: If True, return a third argument, tuple of (n, m)
             arrays with the number of observed events for each possible outcome.
@@ -35,7 +35,7 @@ def lnl_and_weights(mu_sig, f_sig_1, mu_bg_1, mu_bg_2,
     if m_max is None:
         n_max = nafi.large_n_for_mu(mu_2.max())
     return _lnl_and_weights(
-        mu_sig, f_sig_1, mu_bg_1, mu_bg_2, 
+        mu_sig, f_sig_1, mu_bg_1, mu_bg_2,
         n_max, m_max, return_outcomes)
 
 
@@ -67,7 +67,7 @@ def outcomes(n_max, m_max, ravel=True):
     Arguments:
       n_max: Maximum number of events in first bin to consider
       m_max: Maximum number of events in second bin to consider
-      ravel: If False (default is true), instead return two 
+      ravel: If False (default is true), instead return two
             (n_max + 1, m_max + 1) 2d arrays.
     """
     # Outcomes defined by n (obs in main) and m (obs in anc)
@@ -107,7 +107,7 @@ def _weights(mu_sig, n, m, *, f_sig_1, mu_bg_1, mu_bg_2):
         * jax.scipy.stats.poisson.pmf(m, mu_2))
     # TODO: investigate NaNs. From mu=0, n!=0?
     p_outcome = jnp.nan_to_num(p_outcome)
-    # Ensure outcome weights of outcomes sum to one
+    # Ensure weights of outcomes sum to one
     return p_outcome / p_outcome.sum(axis=0)
 
 

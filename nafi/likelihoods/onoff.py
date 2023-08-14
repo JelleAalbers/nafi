@@ -18,25 +18,25 @@ outcomes = twobin.outcomes
 @jax.jit
 def profile_lnl(mu_sig_hyp, n, m, *, tau):
     """Return (n_outcomes, n_hyp) log profile likelihood.
-    
+
     That is, mu_bg is replaced with its conditional best-fit value
     for each tested hypothesis.
     """
     # Get best-fit background (n_outcomes, n_hyp)
     b_doublehat = conditional_bestfit_bg(
         mu_sig_hyp[None,:], n[:,None], m[:,None], tau=tau)
-    
+
     return _lnl(
         mu_sig_hyp[None,:], n[:,None], m[:,None], mu_bg=b_doublehat, tau=tau)
 
 
 @jax.jit
 def profile_weights(mu_sig_hyp, n, m, n_obs, m_obs, *, tau):
-    """Return (n_outcomes, n_hyp) weights of outcomes using the 
+    """Return (n_outcomes, n_hyp) weights of outcomes using the
     profile construction for the observed outcome n_obs, m_obs.
 
     That is, the weights correspond to generating toy dataset with different
-    mu_bg for each hypothesis, specifically, mu_bg set to the conditional 
+    mu_bg for each hypothesis, specifically, mu_bg set to the conditional
     best-fit value to the observed data for each hypothesis.
     """
     # Get conditional best-fit background, (hypotheses,) array
@@ -53,19 +53,19 @@ def profile_weights(mu_sig_hyp, n, m, n_obs, m_obs, *, tau):
 
 @jax.jit
 def true_weights(mu_sig_hyp, mu_bg_hyp, n, m, *, tau):
-    """Return (outcomes, signal hypotheses, background hypotheses) array 
+    """Return (outcomes, signal hypotheses, background hypotheses) array
     with weights of outcomes given the true signal and background hypotheses.
 
     (i.e. P(outcome | sig, bg), normalized to sum to 1 over outcomes)
-    
+
     Arguments:
      - mu_sig_hyp: Array with signal rate hypotheses
      - mu_bg_hyp: Array with background rate hypotheses
      - n, m, tau: same as always
     """
     return _weights(
-        mu_sig_hyp[None,:,None], 
-        n[:,None,None], 
+        mu_sig_hyp[None,:,None],
+        n[:,None,None],
         m[:,None,None],
         mu_bg=mu_bg_hyp[None,None,:],
         tau=tau)
@@ -73,7 +73,7 @@ def true_weights(mu_sig_hyp, mu_bg_hyp, n, m, *, tau):
 
 @jax.jit
 def _lnl(mu_sig, n, m, *, mu_bg, tau):
-    """Return (n_outcomes, n_hyp) log likelihood for 
+    """Return (n_outcomes, n_hyp) log likelihood for
     a *given/fixed/known* mu_bg.
 
     All arguments must be broadcastable. Factorial term is omitted.
@@ -84,7 +84,7 @@ def _lnl(mu_sig, n, m, *, mu_bg, tau):
 
 @jax.jit
 def _weights(mu_sig, n, m, *, mu_bg, tau):
-    """Return (n_outcomes, n_hyp) weights of outcomes 
+    """Return (n_outcomes, n_hyp) weights of outcomes
     for a given/fixed/known mu_bg
 
     All arguments must be broadcastable.

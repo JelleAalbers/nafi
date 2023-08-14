@@ -24,7 +24,7 @@ def hypothesis_spacing(hypotheses):
 @export
 @jax.jit
 def uniform_prior(hypotheses):
-    """Return prior over hypotheses corresponding to a uniform prior density 
+    """Return prior over hypotheses corresponding to a uniform prior density
     over the parameter of interest.
 
     Specifically, the return value represents the following probabilities:
@@ -57,7 +57,7 @@ def posterior(lnl, hypotheses, ln_prior=None):
     Arguments:
       lnl: Log likelihood(ratio)s, (trials, hypotheses)
       hypotheses: Hypotheses to compute p-values for.
-      ln_prior: Log of prior, (hypotheses) array. 
+      ln_prior: Log of prior, (hypotheses) array.
         If not provided, assumed proportional to the spacing between hypotheses,
         so the prior density is flat/uniform in the parameter of interest.
 
@@ -65,7 +65,7 @@ def posterior(lnl, hypotheses, ln_prior=None):
     """
     # Estimate spacing between hypotheses
     # (gradient is ~ jnp.diff, but without changing the length)
-    
+
     if ln_prior is None:
         ln_prior = jnp.log(uniform_prior(hypotheses))
 
@@ -84,7 +84,7 @@ def posterior_cdf(posterior):
     approximation for a continuous parameter.
 
     In particular, we assume
-     
+
     .. math::
        P(truth \leq h) = P(truth < h)
 
@@ -126,9 +126,9 @@ def bayesian_pvals(lnl, hypotheses, interval_type='hdpi', ln_prior=None):
       lnl: Log likelihood(ratio)s, (trials, hypotheses)
       hypotheses: Hypotheses to compute p-values for.
       interval_type: Interval type for which to compute p-values, either
-        'hdpi' (high-density posterior, default), or 'ul' (upper limit), 
+        'hdpi' (high-density posterior, default), or 'ul' (upper limit),
         or 'll' (lower limit). Note 'll' will give the CDF.
-      ln_prior: Log of prior, (hypotheses) array. 
+      ln_prior: Log of prior, (hypotheses) array.
         If not provided, assumed proportional to the spacing between hypotheses,
         so the prior density is flat/uniform in the parameter of interest.
     """
@@ -173,7 +173,7 @@ def bayesian_pvals(lnl, hypotheses, interval_type='hdpi', ln_prior=None):
 @jax.jit
 def posterior_cdf_quantile(posterior_cdf, hypotheses, quantile):
     """Return hypotheses where posterior CDF reaches a quantile
-    
+
     Arguments:
       posterior_cdf: (outcomes, hypotheses) array
       hypotheses: hypotheses, shape (n_hypotheses,)
@@ -192,14 +192,14 @@ def posterior_cdf_quantile(posterior_cdf, hypotheses, quantile):
 @export
 @jax.jit
 def min_cred_ul(posterior_cdf, hypotheses, ll, cl=0.9):
-    """Return upper limits so that the intervals with the lower limit ll 
+    """Return upper limits so that the intervals with the lower limit ll
     have credibility cl.
-    
+
     Experimental function, may be removed later.
 
     Arguments:
       posterior_cdf: posterior CDF, shape (n_outcomes, n_hypotheses,)
-        See nafi.posterior_cdf, don't just cumsum your posterior if you care 
+        See nafi.posterior_cdf, don't just cumsum your posterior if you care
         about off-by-half errors.
       hypotheses: hypotheses, shape (n_hypotheses,)
       ll: lower limits, shape (n_outcomes,).
@@ -208,10 +208,10 @@ def min_cred_ul(posterior_cdf, hypotheses, ll, cl=0.9):
     # Credibility of (0, ll)
     inv_cred_ll = nafi.credibility(
         posterior_cdf,
-        hypotheses, 
+        hypotheses,
         hypotheses[0] + 0 * ll,
         ll)
-        
+
     # Desired posterior quantile for the ul
     min_cred_q = (inv_cred_ll + cl).clip(0, 1)
 
@@ -221,16 +221,16 @@ def min_cred_ul(posterior_cdf, hypotheses, ll, cl=0.9):
 @export
 @jax.jit
 def repair_cred(posterior_cdf, hypotheses, ul, ll, cl=0.9):
-    """Widen (ul, ll) to have credibility at least cl; 
+    """Widen (ul, ll) to have credibility at least cl;
     first by lowering the ll then raising then ul if needed.
 
     (That way the overcoverage is concentrated on lower hypotheses)
-    
+
     Experimental function, may be removed later.
 
     Arguments:
       posterior_cdf: posterior CDF, shape (n_outcomes, n_hypotheses,)
-        See nafi.posterior_cdf, don't just cumsum your posterior if you care 
+        See nafi.posterior_cdf, don't just cumsum your posterior if you care
         about off-by-half errors.
       hypotheses: hypotheses, shape (n_hypotheses,)
       ul: upper limits, shape (n_outcomes,).
@@ -250,10 +250,10 @@ def repair_cred(posterior_cdf, hypotheses, ul, ll, cl=0.9):
     # Credibility of (0, ll)
     inv_cred_ll = nafi.credibility(
         posterior_cdf,
-        hypotheses, 
+        hypotheses,
         hypotheses[0] + 0 * ll,
         ll)
-    
+
     desired_q_ul = (inv_cred_ll + cl).clip(0, 1)
     ul = jnp.maximum(
         ul,

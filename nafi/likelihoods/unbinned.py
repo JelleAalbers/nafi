@@ -31,11 +31,11 @@ class UnbinnedSignalBackground:
         present = list(params.keys())
         missing = set(self.required_params) - set(present)
         if missing:
-            raise ValueError(f"Missing required parameters {missing}")        
+            raise ValueError(f"Missing required parameters {missing}")
 
     def lnl_and_weights(
             self,
-            mu_sig_hyp, 
+            mu_sig_hyp,
             mu_bg,
             key=None,
             n_sig_max=None,
@@ -44,17 +44,17 @@ class UnbinnedSignalBackground:
             return_outcomes=False,
             **params):
         """Return (logl, toy weight) for an unbinned signal/background likelihood
-        
+
         Both are (n_outcomes, hypotheses) arrays:
                 lnl contains the log likelihood at each hypothesis,
                 toy_weight contains P(outcome | hypotheses), normalized over outcomes
-        
+
         Arguments:
             mu_sig_hyp: Array with expected signal event hypotheses
             mu_bg: EXpected background events (scalar)
             key: Jax PNRG key to use. If not provided, will choose a random one
                 according to the numpy global random state.
-            n_sig_max: Largest number of signal events to consider. 
+            n_sig_max: Largest number of signal events to consider.
                 If None, will be determined automatically from mu_sig.
             n_bg_max: Largest number of background events to consider.
                 If None, will be determined automatically from mu_bg.
@@ -76,11 +76,11 @@ class UnbinnedSignalBackground:
             seed = np.random.randint(2**32)
             key = jax.random.PRNGKey(seed=seed)
         lnl, weights, summary = self._lnl_and_weights(
-            mu_sig_hyp=mu_sig_hyp, 
-            mu_bg=mu_bg, 
-            key=key, 
+            mu_sig_hyp=mu_sig_hyp,
+            mu_bg=mu_bg,
+            key=key,
             n_sig_max=n_sig_max,
-            n_bg_max=n_bg_max, 
+            n_bg_max=n_bg_max,
             trials_per_n=trials_per_n,
             params=params)
         if return_outcomes:
@@ -88,12 +88,12 @@ class UnbinnedSignalBackground:
         return lnl, weights
 
 
-    @partial(jax.jit, 
+    @partial(jax.jit,
              static_argnames=('self', 'trials_per_n', 'n_sig_max', 'n_bg_max'))
     def _lnl_and_weights(
             self,
-            mu_sig_hyp, 
-            mu_bg, 
+            mu_sig_hyp,
+            mu_bg,
             key,
             n_sig_max,
             n_bg_max,
@@ -113,7 +113,7 @@ class UnbinnedSignalBackground:
         # drs_bg is (n_trials, n_hyp), summary_bg is (n_trials,)
         key, subkey = jax.random.split(key)
         drs_bg, summary_bg = self._drs_one_source(
-            mu=mu_bg, 
+            mu=mu_bg,
             key=subkey,
             n_max=n_bg_max,
             simulate=self.simulate_background,
@@ -163,18 +163,18 @@ class UnbinnedSignalBackground:
         """Return sum of log differential rate for events from _one_ source
             i.e. the second term in the unbinned ln L computation
             for the events from _one_ source only.
-        
+
         Result is an (n_trials, n_hypotheses) array
-        
+
         Arguments:
         - n_max: maximum n events to generate. Behaves as though extra events
             are discarded
-        - poisson: if False, always make mu events instead of Poisson sampling        
+        - poisson: if False, always make mu events instead of Poisson sampling
         """
         # Draw event positions: (n_trials, n_max) array
         key, subkey = jax.random.split(key)
         x = simulate(n_trials, n_max, subkey, params)
-        
+
         if poisson:
             # Draw event times, reject events beyond the dataset
             # (Would be clearer if we draw from exp with mean 1/mu, then demand < 1)
@@ -184,21 +184,21 @@ class UnbinnedSignalBackground:
             present = t < mu
         else:
             # Keep a fixed number of events
-            # We still generated n_max events above since 
+            # We still generated n_max events above since
             # jax won't let us  specialize shapes based on argument values
             present = (jnp.arange(n_max) < mu)[None, :]
-        
+
         # Differential rate (n_trials, n_max+1, n_hyp)
         dr = self.differential_rate(
             x[...,None], mu_sig_hyp[None,None,:], mu_bg, params)
-        
+
         # Second term in log likelihood (n_trials, n_hyp)
         logdr_sum = jnp.sum(jax.scipy.special.xlogy(present[...,None], dr), axis=1)
 
         # Summary statistic (n_trials,)
         summary = self.summary(x, present, params)
         return logdr_sum, summary
-    
+
     def single_lnl(self, x, mu_sig, mu_bg, **params):
         """Return log likelihood for a single observation
 
@@ -229,7 +229,7 @@ class UnbinnedSignalBackground:
         The number must be additive over events. This function is called
         once for signal events and once for background events, then the results
         are added.
-        
+
         By default, returns the total number of events.
         """
         # x and present are both (n_trials, n_ns) arrays
@@ -238,15 +238,15 @@ class UnbinnedSignalBackground:
     def simulate_signal(self, n_trials, n_max, key, params):
         """Simulate (n_trials, n_max) signal events"""
         raise NotImplementedError
-    
+
     def simulate_background(self, n_trials, n_max, key, params):
         """Simulate (n_trials, n_max) background events"""
         raise NotImplementedError
-    
+
     def differential_rate(self, x, mu_sig, mu_bg, params):
         """Return differential rate for events with observed x
         """
-        raise NotImplementedError    
+        raise NotImplementedError
 
 
 @export
@@ -254,7 +254,7 @@ class TwoGaussians(UnbinnedSignalBackground):
     """Simulation and (extended) unbinned log likelihood for a signal and
     background that are both Gaussians with unit variance, but different means.
 
-    Takes a single parameter, ``sigma_sep``, the distance between the signal
+    Takes a single parameter, ``sigma_sep``, the distance between the signa.
     and background means.
     """
 
@@ -262,10 +262,10 @@ class TwoGaussians(UnbinnedSignalBackground):
 
     def simulate_signal(self, n_trials, n_max, key, params):
         return jax.random.normal(key, shape=(n_trials, n_max))
-    
+
     def simulate_background(self, n_trials, n_max, key, params):
         return (
-            self.simulate_signal(n_trials, n_max, key, params) 
+            self.simulate_signal(n_trials, n_max, key, params)
             + params['sigma_sep'])
 
     def differential_rate(self, x, mu_sig, mu_bg, params):

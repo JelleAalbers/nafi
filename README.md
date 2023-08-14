@@ -39,7 +39,7 @@ Limitations
 ------------
 
   1. Nafi is **not a modelling, fitting, simulation, or caching package**. We just take likelihoods and turn them into p-values, limits, etc. Except for the simple examples below, _you_ must provide the likelihood, with nuisance parameters profiled or marginalized out.
-        
+
   2. Nafi works by **bruteforce scanning** over hypotheses you provide. That makes it robust, but also means it needs much memory and computation to achieve high accuracy. For example:
 
       * When `nafi.test_statistics` computes the maximum likelihood, it takes the maximum over the provided hypotheses (with parabolic interpolation). It does not recompute likelihoods in a minimizer loop.

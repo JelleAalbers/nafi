@@ -12,7 +12,7 @@ SIGMAS = jnp.array([-2, -1, 0, 1, 2])
 
 @export
 @partial(jax.jit, static_argnames=('singular_is_empty'))
-def outcome_probabilities(ll, ul, toy_weight, hypotheses,
+def outcome_probabilities(ll, ul, weights, hypotheses,
                           singular_is_empty=False):
     """Returns probabilities that confidence intervals satisfy some
     properties.
@@ -29,7 +29,7 @@ def outcome_probabilities(ll, ul, toy_weight, hypotheses,
     Arguments:
       ll: (outcomes,) array of lower limits
       ul: (outcomes,) array of upper limits
-      toy_weight: (outcomes, hypotheses) array of outcome weights
+      weights: (outcomes, hypotheses) array of normalized P(outcome|hypothesis)
       hypotheses: (hypotheses,) array of hypotheses
       singular_is_empty: If True, consider single-hypothesis
         intervals as empty intervals. Otherwise only truly empty intervals
@@ -43,14 +43,14 @@ def outcome_probabilities(ll, ul, toy_weight, hypotheses,
 
     # Compute P(degenerate interval | mu is true)
     empty = jnp.isnan(ul) & jnp.isnan(ll)
-    p_empty = _get_p(empty, toy_weight)
+    p_empty = _get_p(empty, weights)
 
     # Compute P(mu excluded | mu is true) -- i.e. coverage
     ul_is_ok = hypotheses[None,:] <= ul[:,None]
     ll_is_ok = ll[:,None] <= hypotheses[None,:]
-    p_mistake = 1 - _get_p(ul_is_ok & ll_is_ok, toy_weight)
-    p_false_ul = 1 - _get_p(ul_is_ok, toy_weight)
-    p_false_ll = 1 - _get_p(ll_is_ok, toy_weight)
+    p_mistake = 1 - _get_p(ul_is_ok & ll_is_ok, weights)
+    p_false_ul = 1 - _get_p(ul_is_ok, weights)
+    p_false_ll = 1 - _get_p(ll_is_ok, weights)
 
     # Compute P(mu excluded | 0 is true)
     # TODO: this makes (n_trials, n_hyp) arrays again
@@ -58,18 +58,18 @@ def outcome_probabilities(ll, ul, toy_weight, hypotheses,
     ll_allows_mu = ll[:,None] <= hypotheses[None,:]
     ul_allows_mu = hypotheses[None,:] <= ul[:,None]
     p_excl_bg = 1 - jnp.average(
-        ll_allows_mu & ul_allows_mu, weights=toy_weight[:,0], axis=0)
+        ll_allows_mu & ul_allows_mu, weights=weights[:,0], axis=0)
     # Compute P(mu excluded by UL | 0 is true)
     # The inverse of this maps quantiles to the "Brazil band"
     p_excl_bg_ul = 1 - jnp.average(
-        ul_allows_mu, weights=toy_weight[:,0], axis=0)
+        ul_allows_mu, weights=weights[:,0], axis=0)
     p_excl_bg_ll = 1 - jnp.average(
-        ll_allows_mu, weights=toy_weight[:,0], axis=0)
+        ll_allows_mu, weights=weights[:,0], axis=0)
 
     # P(discovery | mu is true)
     # here discovery = lower limit > 0 (and interval nonempty)
     ll_liftoff = (ll > hypotheses[0])
-    p_disc = _get_p(ll_liftoff, toy_weight)
+    p_disc = _get_p(ll_liftoff, weights)
 
     return dict(
         mistake=p_mistake,
@@ -87,7 +87,7 @@ def _get_p(bools, weights):
 
     Arguments:
       bools: (outcome, hyp) or (outcome,) array
-      weights: (outcome, hyp) or (hypothesis,) array with P(outcome | hyp)
+      weights: (outcomes, hypotheses) array of normalized P(outcome|hypothesis)
     """
     if len(bools.shape) == 1:
         # bools is a (outcome,) array
@@ -102,14 +102,14 @@ def _get_p(bools, weights):
 @export
 @partial(jax.jit, static_argnames=('singular_is_empty'))
 def twod_power(
-        ll, ul, toy_weight, hypotheses,
+        ll, ul, weights, hypotheses,
         singular_is_empty=False):
     """Returns (hypothesis, truth) square array with P(hyp excluded | truth)
 
     Arguments:
       ll: (outcomes,) array of lower limits
       ul: (outcomes,) array of upper limits
-      toy_weight: (outcomes, hypotheses) array of outcome weights
+      weights:(outcomes, hypotheses) array of normalized P(outcome|hypothesis)
       hypotheses: (hypotheses,) array of hypotheses
       singular_is_empty: If True, consider single-hypothesis
         intervals as empty intervals. Otherwise only truly empty intervals
@@ -126,36 +126,36 @@ def twod_power(
         (ll[:,None] <= hypotheses[None,:])
         & (hypotheses[None,:] <= ul[:,None]))
 
-    return jax.vmap(_get_p, in_axes=(1, None))(is_allowed, toy_weight)
+    return jax.vmap(_get_p, in_axes=(1, None))(is_allowed, weights)
 
 
 @export
-def brazil_band(limits, toy_weight, return_array=False):
+def brazil_band(limits, weights, return_array=False):
     """Return a dictionary with "Brazil band" quantiles.
     Keys are the five sigma levels, e.g. -1 gives the -1σ quantile
     (the 15.8th percentile).
 
     Arguments:
       limits: Upper (or lower) limits, shape (n_trials,)
-      toy_weight: weights of the toys, shape (n_trials, n_hypotheses)
+      weights: (outcomes, hypotheses) array of normalized P(outcome|hypothesis)
       return_array: if False, instead returns a (n_hyp, 5) array,
         with the second axis running over levels (index 0 = -2σ, 1 = -1σ, etc)
       progress: whether to show a progress bar
     """
-    sensi = _brazil_band(limits, toy_weight, SIGMAS)
+    sensi = _brazil_band(limits, weights, SIGMAS)
     if return_array:
         return sensi
     return {sigma: sensi for sigma, sensi in zip(SIGMAS.tolist(), sensi.T)}
 
 
 @jax.jit
-def _brazil_band(limits, toy_weight, sigmas):
+def _brazil_band(limits, weights, sigmas):
     quantiles = jax.scipy.stats.norm.cdf(sigmas)
 
     # Sort once, we need the same order every hypothesis in the vmap
     sort_order = jnp.argsort(limits)
     sorted_limits = limits[sort_order]
-    sorted_weights = toy_weight[sort_order, :]
+    sorted_weights = weights[sort_order, :]
 
     # vmap over hypotheses
     sensi = jax.vmap(

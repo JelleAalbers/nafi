@@ -25,7 +25,7 @@ def lnl_and_weights(mu_sig, mu_bg, n_max=None, return_outcomes=False):
         mu_bg: Background rate (scalar)
         n_max: Largest number of events to consider. If None, will be
             determined automatically from mu_sig and mu_bg.
-        return_outcomes: If True, return a third array of shape (n_outcomes,) 
+        return_outcomes: If True, return a third array of shape (n_outcomes,)
             containing the number of events for each outcome.
     """
     if n_max is None:
@@ -44,10 +44,7 @@ def _lnl_and_weights(mu_sig, mu_bg, n_max, return_outcomes=False):
     # Probability and log likelihood of observation (given hypothesis)
     # (n, mu) arrays
     lnl = jax.scipy.stats.poisson.logpmf(n[:,None], mu_tot[None,:])
-    p = jnp.exp(lnl)
-    # Ensure ps are normalized over n
-    # (not guaranteed since we don't sum n to infinity)
-    p /= p.sum(axis=0)
+    p = nafi.lnl_to_weights(lnl)
     if return_outcomes:
         return lnl, p, n
     return lnl, p

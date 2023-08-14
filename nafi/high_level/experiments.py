@@ -72,12 +72,12 @@ class Experiment:
     def evaluate_intervals(self, ll, ul):
         return DataAboutIntervals(
             p_outcome = nafi.outcome_probabilities(
-                ll, ul, 
-                toy_weight=self.weights, 
+                ll, ul,
+                toy_weight=self.weights,
                 hypotheses=self.hypotheses,
                 singular_is_empty=self.singular_is_empty),
             credibility = nafi.credibility(
-                self.posterior_cdf, 
+                self.posterior_cdf,
                 self.hypotheses,
                 ll, ul),
             brazil = nafi.brazil_band(ul, self.weights),
