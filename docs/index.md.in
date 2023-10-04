@@ -3,4 +3,6 @@
 
 likelihoods.md
 reference.rst
+poisson_dice.ipynb
+feldman_cousins.ipynb
 ```

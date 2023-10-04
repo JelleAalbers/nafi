@@ -8,7 +8,7 @@ with open('HISTORY.md') as file:
 
 def get_requirements(path='requirements.txt', strict=False):
     """Return a list of requirements from a requirements file.
-    
+
     Arguments:
      - strict: If False, strip version tags
     """

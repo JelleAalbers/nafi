@@ -1,10 +1,10 @@
-Example likelihoods
-===================
+Likelihoods
+============
 
 Nafi includes a few simple likelihoods for testing and demonstration purposes.
 
-For more complex situations you probably want to evaluate likelihoods
-and enumerate/simulate outcomes outside of nafi, then feed these into nafi's 
+In more complex situations you will want to evaluate likelihoods
+and enumerate/simulate outcomes outside of nafi, then feed these into nafi's
 inference functions.
 
 
