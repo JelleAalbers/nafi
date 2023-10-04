@@ -13,7 +13,7 @@ def _logit(p):
 @export
 @partial(jax.jit, static_argnames=('n_x', 'x_transform', 'return_outcomes'))
 def lnl_and_weights(mu_hyp, n_x=1000, x_transform=_logit, return_outcomes=False):
-    """Return (logl, toy weight) for a Gaussian measurement
+    r"""Return (logl, toy weight) for a Gaussian measurement
     of a parameter mu constrained to >= 0.
 
     That is, the true value is at mu >= 0, and the experiment observes

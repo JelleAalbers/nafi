@@ -73,7 +73,7 @@ class Experiment:
         return DataAboutIntervals(
             p_outcome = nafi.outcome_probabilities(
                 ll, ul,
-                toy_weight=self.weights,
+                weights=self.weights,
                 hypotheses=self.hypotheses,
                 singular_is_empty=self.singular_is_empty),
             credibility = nafi.credibility(
