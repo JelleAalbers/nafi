@@ -32,7 +32,7 @@ Gaussian measurement
     :inherited-members:
 
 
-Extend unbinned likelihood
+Extended unbinned likelihood
 -------------------------------
 
 .. automodule:: nafi.likelihoods.unbinned

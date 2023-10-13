@@ -37,7 +37,11 @@ setuptools.setup(
                  'sphinx_rtd_theme',
                  'nbsphinx',
                  'myst-parser',
-                 'jax[cpu]'],
+                 'jax[cpu]',
+                 # Need ipython for syntax highlighting, see
+                 # https://nbsphinx.readthedocs.io/en/0.6.0/installation.html
+                 'ipython',
+                 ],
         'strict-deps': requirements_strict,
     },
     long_description=readme + '\n\n' + history,
