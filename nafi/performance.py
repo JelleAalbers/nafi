@@ -126,7 +126,7 @@ def twod_power(
         (ll[:,None] <= hypotheses[None,:])
         & (hypotheses[None,:] <= ul[:,None]))
 
-    return jax.vmap(_get_p, in_axes=(1, None))(is_allowed, weights)
+    return 1 - jax.vmap(_get_p, in_axes=(1, None))(is_allowed, weights)
 
 
 @export

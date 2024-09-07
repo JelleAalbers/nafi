@@ -98,6 +98,9 @@ def outcome_plot(
 
     for method, style in method_styles.items():
         style = {**common_style, **style}
+        style.setdefault('label', method.name)
+        if not legend:
+            del style['label']
 
         p = _get_p_outcome(xp, method, outcome)
         if ratio_with:
@@ -112,7 +115,6 @@ def outcome_plot(
         plt.plot(
             xp.hypotheses,
             p * yscale,
-            label=method.name if legend else None,
             **style)
 
     plt.ylim(*ylim)
@@ -180,8 +182,7 @@ def power_vs_mistake(
     else:
         suffix = ''
 
-    legend_kwargs = kwargs.get('legend_kwargs', dict())
-    del kwargs['legend_kwargs']
+    legend_kwargs = kwargs.pop('legend_kwargs', {})
     legend_kwargs.setdefault('loc', 'upper left')
     legend_kwargs.setdefault('frameon', False)
 
@@ -319,3 +320,41 @@ def coverage_credibility_plot(
 
     plt.subplots_adjust(wspace=0.07, hspace=0.07)
     plt.suptitle(xp.name, y=0.95)
+
+
+##
+# Plot utilities
+##
+
+def logticks(tmin, tmax=None, tick_at=None):
+    if tick_at is None:
+        tick_at = (1, 2, 5, 10)
+    a, b = np.log10([tmin, tmax])
+    a = np.floor(a)
+    b = np.ceil(b)
+    ticks = np.sort(np.unique(np.outer(
+        np.array(tick_at),
+        10.**np.arange(a, b)).ravel()))
+    return ticks[(tmin <= ticks) & (ticks <= tmax)]
+
+def _apply_log_scale(axis, scale_func, limit_func, a=None, b=None, scalar_ticks=True, tick_at=None):
+    scale_func('log')
+    if a is not None:
+        if b is None:
+            a, b = a[0], a[-1]
+        limit_func(a, b)
+    a, b = limit_func()
+    if scalar_ticks:
+        axis.set_major_formatter(matplotlib.ticker.FormatStrFormatter('%g'))
+        axis.set_ticks(logticks(a, b, tick_at))
+        axis.set_minor_locator(matplotlib.ticker.NullLocator())
+
+@export
+def log_x(a=None, b=None, scalar_ticks=True, tick_at=None):
+    ax = plt.gca()
+    _apply_log_scale(ax.xaxis, plt.xscale, plt.xlim, a, b, scalar_ticks, tick_at)
+
+@export
+def log_y(a=None, b=None, scalar_ticks=True, tick_at=None):
+    ax = plt.gca()
+    _apply_log_scale(ax.yaxis, plt.yscale, plt.ylim, a, b, scalar_ticks, tick_at)

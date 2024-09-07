@@ -51,7 +51,7 @@ class UnbinnedSignalBackground:
 
         Arguments:
             mu_sig_hyp: Array with expected signal event hypotheses
-            mu_bg: EXpected background events (scalar)
+            mu_bg: Expected background events (scalar)
             key: Jax PNRG key to use. If not provided, will choose a random one
                 according to the numpy global random state.
             n_sig_max: Largest number of signal events to consider.

@@ -59,7 +59,7 @@ Nafi includes some likelihoods for testing and simple applications. These all li
 * `unbinned`: for signal and background events with different distributions along a single observable `x`.
 * `two_gaussians`: an example of `unbinned`, where signal and background are equal-width Gaussians separated by a parameter `sigma_sep` times that width.
 
-Below are examples with profile likelihoods, i.e. problems with nuisance parameters eliminating through profiling. In both cases the background rate is the nuisance parameters.
+Below are examples with profile likelihoods, i.e. problems with nuisance parameters that are eliminated through profiling. In both cases the background rate is the only nuisance parameter.
 
 * `onoff`: derived from `twobin`, where the second bin has no signal but a multiple `tau` of the first bin's expected background. Thus the second bin is an ancillary experiment that calibrates the background.
 * `counting_uncbg`, a single-bin counting experiment where the background expectation has a Gaussian uncertainty. This may be ill-defined, as backgrounds cannot be negative; `onoff` is a more proper test case for profile likelihoods.

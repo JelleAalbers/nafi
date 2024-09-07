@@ -98,8 +98,6 @@ def conditional_bestfit_bg(mu_sig_hyp, n, m, *, tau):
     """Return the conditional best fit background rate for an on-off experiment.
     See lnl_and_weights for details.
 
-    with unknown background.
-
     Arguments:
         n: Number of observed events
         m: Number of observed events in the ancillary experiment
